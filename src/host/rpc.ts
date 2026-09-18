@@ -37,6 +37,15 @@ function decodeCommand(value: unknown): Command | undefined {
     if (pending !== 'approval' && pending !== 'plan-review' && pending !== 'question') return undefined
     return { type: 'Snooze', sessionId, until: value.until, pendingInteraction: pending }
   }
+  if (value.type === 'Drop') {
+    const sessionId = sessionIdOf(value)
+    if (sessionId === undefined || typeof value.index !== 'number') return undefined
+    if (value.dest !== 'pinned' && value.dest !== 'active' && value.dest !== 'settled') return undefined
+    if (typeof value.at === 'number') {
+      return { type: 'Drop', sessionId, dest: value.dest, index: value.index, at: value.at }
+    }
+    return { type: 'Drop', sessionId, dest: value.dest, index: value.index }
+  }
   if (value.type !== 'Gc' || !Array.isArray(value.livingIds)) return undefined
   const livingIds: string[] = []
   for (const id of value.livingIds) {

@@ -21,6 +21,11 @@ export function ensureTaskbarStyles(): void {
 .dsht3-line1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
 .dsht3-line2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-empty { padding:24px 12px; color:var(--dsw-alias-label-tertiary); }
+.dsht3-draft { display:flex; align-items:center; gap:2px; }
+.dsht3-draft .dsht3-card { flex:1; min-width:0; }
+.dsht3-discard { cursor:pointer; flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); padding:4px 8px; border-radius:6px; }
+.dsht3-discard:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-pen { color:var(--dsw-alias-state-warn-primary); display:inline-flex; vertical-align:-2px; margin-right:4px; }
 `
   document.head.append(style)
 }

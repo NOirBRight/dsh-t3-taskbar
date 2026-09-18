@@ -31,6 +31,7 @@ export interface ProjectInput {
   current?: string
   archivedSessionIds: readonly string[]
   ledger?: Ledger
+  drafts?: Readonly<Record<string, string>>
 }
 
 export interface Card {
@@ -39,10 +40,12 @@ export interface Card {
   sessionTitle: string
   liveStatus?: LiveStatus
   selected: boolean
+  unsentDraft?: true
 }
 
 export interface ViewModel {
   shelves: Record<Shelf, Card[]>
+  unsentDrafts: Card[]
 }
 
 /** Overlay facts per Session. Absence of a record means Active with recency order. */
@@ -117,36 +120,61 @@ function liveStatusOf(session: Session): LiveStatus | undefined {
   return undefined
 }
 
-function toCard(session: Session, workspaces: readonly Workspace[], current?: string): Card {
+function draftOf(input: ProjectInput, sessionId: string): string {
+  const text = input.drafts?.[sessionId]
+  return text !== undefined && text !== '' ? text : ''
+}
+
+function toCard(
+  session: Session,
+  workspaces: readonly Workspace[],
+  current: string | undefined,
+  opts?: { preview?: string, unsentDraft?: true },
+): Card {
   const workspace = workspaceOf(session, workspaces)
   const liveStatus = liveStatusOf(session)
   return {
     sessionId: session.id,
     workspaceTitle: workspace?.title ?? '',
-    sessionTitle: session.title,
+    sessionTitle: opts?.preview ?? session.title,
     ...(liveStatus !== undefined ? { liveStatus } : {}),
     selected: session.id === current,
+    ...(opts?.unsentDraft === true ? { unsentDraft: true } : {}),
   }
 }
 
 export function project(input: ProjectInput): ViewModel {
   const archived = new Set(input.archivedSessionIds)
-  const visible = input.sessions.filter((session) => {
+  const listed = input.sessions.filter((session) => {
     if (session.origin === 'subagent') return false
     if (archived.has(session.id)) return false
-    if (session.blank && session.id !== input.current) return false
     return true
   })
   const ledger = input.ledger ?? {}
+  const unsentDrafts: Card[] = []
   const pinned: Card[] = []
   const active: Card[] = []
-  for (const session of visible) {
-    const card = toCard(session, input.workspaces, input.current)
+  for (const session of listed) {
+    const draft = draftOf(input, session.id)
+    if (session.blank) {
+      if (draft !== '') {
+        unsentDrafts.push(toCard(session, input.workspaces, input.current, { preview: draft }))
+        continue
+      }
+      if (session.id !== input.current) continue
+    }
+    const card = toCard(
+      session,
+      input.workspaces,
+      input.current,
+      draft !== '' ? { unsentDraft: true } : undefined,
+    )
     if (ledger[session.id]?.pin !== undefined) pinned.push(card)
     else active.push(card)
   }
   pinned.sort((a, b) => (ledger[a.sessionId]?.pin ?? 0) - (ledger[b.sessionId]?.pin ?? 0))
   return {
+    unsentDrafts,
     shelves: {
       pinned,
       active,

@@ -17,6 +17,10 @@ export function ensureTaskbarStyles(): void {
 .dsht3-list { min-height:0; flex:1; overflow:auto; padding:4px 6px 12px; }
 .dsht3-shelf { margin:2px 0 8px; }
 .dsht3-shead { min-height:28px; display:flex; align-items:center; padding:4px 8px; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); font-weight:500; }
+.dsht3-stoggle { width:100%; border:0; background:transparent; cursor:pointer; text-align:left; gap:6px; }
+.dsht3-slim { flex:1; min-width:0; min-height:28px; display:flex; align-items:center; padding:4px 8px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); cursor:pointer; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:inherit; }
+.dsht3-unsettle { flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; font:var(--dsw-font-xxs-12); padding:4px 6px; margin:2px 0; border-radius:6px; }
+.dsht3-unsettle:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
 .dsht3-row { display:flex; align-items:stretch; border-radius:8px; }
 .dsht3-row:hover { background:var(--dsw-specific-sidebar-nav-item-hover); }
 .dsht3-row.dsht3-on { background:var(--dsw-specific-sidebar-nav-item-active); }

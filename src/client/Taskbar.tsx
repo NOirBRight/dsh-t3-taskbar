@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type LiveStatus, type Session, type ViewModel } from '../taskbar.ts'
+import { project, type Card, type Command, type LiveStatus, type Session, type ViewModel } from '../taskbar.ts'
 import { discardDraft, draftsSnapshot, subscribeDrafts } from './drafts.ts'
 import { applyLedger, loadLedger, type HostLedger } from './ledger.ts'
 import { matchingIds } from './search.ts'
@@ -106,6 +106,7 @@ export function Taskbar(props: Props) {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [flowOpen, setFlowOpen] = useState(false)
   const [flowBusy, setFlowBusy] = useState(false)
+  const [settledOpen, setSettledOpen] = useState(false)
 
   const livingKey = useMemo(
     () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
@@ -146,6 +147,7 @@ export function Taskbar(props: Props) {
   const cards = shelfCards(view)
   const draftIds = useMemo(() => new Set(view.unsentDrafts.map((card) => card.sessionId)), [view.unsentDrafts])
   const pinnedIds = useMemo(() => new Set(view.shelves.pinned.map((card) => card.sessionId)), [view.shelves.pinned])
+  const settledIds = useMemo(() => new Set(view.shelves.settled.map((card) => card.sessionId)), [view.shelves.settled])
   const searching = query.trim() !== ''
 
   useEffect(() => {
@@ -236,9 +238,8 @@ export function Taskbar(props: Props) {
   })()
 
   const onOpen = (sessionId: string) => open(sessionId as never)
-  const onTogglePin = (sessionId: string, isPinned: boolean) => {
+  const send = (command: Command) => {
     void (async () => {
-      const command = isPinned ? { type: 'Unpin' as const, sessionId } : { type: 'Pin' as const, sessionId }
       const next = await applyLedger(command, ledger.revision)
       if (next !== undefined) {
         setLedger(next)
@@ -249,12 +250,15 @@ export function Taskbar(props: Props) {
       setLedger(retried ?? loaded)
     })()
   }
+  const onTogglePin = (sessionId: string, isPinned: boolean) => {
+    send(isPinned ? { type: 'Unpin', sessionId } : { type: 'Pin', sessionId })
+  }
 
   const openMenu = (event: ReactMouseEvent, id: string) => {
     event.preventDefault()
     event.stopPropagation()
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-    setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 180, rect.bottom + 4) })
+    setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 240, rect.bottom + 4) })
   }
 
   const started = (id: string) => list.byId[id as never]?.blank !== true
@@ -315,6 +319,27 @@ export function Taskbar(props: Props) {
     )
   }
 
+  const renderSlim = (card: Card) => (
+    <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
+      <button
+        type="button"
+        className="dsht3-slim"
+        aria-current={card.selected ? true : undefined}
+        onClick={() => onOpen(card.sessionId)}
+      >
+        {card.sessionTitle}
+      </button>
+      <button
+        type="button"
+        className="dsht3-unsettle"
+        onClick={() => send({ type: 'Unsettle', sessionId: card.sessionId })}
+      >
+        {t('unsettle')}
+      </button>
+      <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+    </div>
+  )
+
   const directoryFlow = flowOpen && directoryFlowAvailable ? renderSlot('sidebar.workspaces.directoryFlow', {
     open: flowOpen,
     busy: flowBusy,
@@ -346,8 +371,9 @@ export function Taskbar(props: Props) {
 
   const pinned = view.shelves.pinned
   const active = view.shelves.active
+  const settled = view.shelves.settled
   const unsentDrafts = view.unsentDrafts
-  const empty = pinned.length === 0 && active.length === 0 && unsentDrafts.length === 0
+  const empty = pinned.length === 0 && active.length === 0 && settled.length === 0 && unsentDrafts.length === 0
 
   return (
     <div className="dsht3">
@@ -382,6 +408,20 @@ export function Taskbar(props: Props) {
                 {active.map(renderCard)}
               </section>
             ) : null}
+            {/* settled */}
+            {settled.length === 0 ? null : (
+              <section className="dsht3-shelf">
+                <button
+                  type="button"
+                  className="dsht3-shead dsht3-stoggle"
+                  aria-expanded={settledOpen}
+                  onClick={() => setSettledOpen((wasOpen) => !wasOpen)}
+                >
+                  {settledOpen ? '▾' : '▸'} {t('shelf.settled')}
+                </button>
+                {settledOpen ? settled.map(renderSlim) : null}
+              </section>
+            )}
           </>
         )}
       </div>
@@ -395,6 +435,18 @@ export function Taskbar(props: Props) {
               setMenu(null)
             }}>{t('menu.rename')}</button>
             <button type="button" onClick={() => { forkSession(menu.id as never); setMenu(null) }}>{t('menu.fork')}</button>
+            {settledIds.has(menu.id) ? null : (
+              <>
+                <button type="button" onClick={() => {
+                  send(pinnedIds.has(menu.id) ? { type: 'Unpin', sessionId: menu.id } : { type: 'Pin', sessionId: menu.id })
+                  setMenu(null)
+                }}>{t(pinnedIds.has(menu.id) ? 'unpin' : 'pin')}</button>
+                <button type="button" onClick={() => {
+                  send({ type: 'Settle', sessionId: menu.id, at: Date.now() })
+                  setMenu(null)
+                }}>{t('settle')}</button>
+              </>
+            )}
             <button type="button" className="dsht3-danger" onClick={() => { void archiveSession(menu.id as never); setMenu(null) }}>{t('menu.archive')}</button>
           </div>
         </>

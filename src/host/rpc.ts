@@ -16,6 +16,15 @@ function decodeCommand(value: unknown): Command | undefined {
     if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
     return { type: value.type, sessionId: value.sessionId }
   }
+  if (value.type === 'Settle') {
+    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
+    if (typeof value.at !== 'number') return undefined
+    return { type: 'Settle', sessionId: value.sessionId, at: value.at }
+  }
+  if (value.type === 'Unsettle') {
+    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
+    return { type: 'Unsettle', sessionId: value.sessionId }
+  }
   if (value.type !== 'Gc' || !Array.isArray(value.livingIds)) return undefined
   const livingIds: string[] = []
   for (const id of value.livingIds) {

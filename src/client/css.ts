@@ -23,6 +23,11 @@ export function ensureTaskbarStyles(): void {
 .dsht3-card { flex:1; min-width:0; min-height:44px; display:flex; flex-direction:column; justify-content:center; gap:2px; padding:6px 8px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); cursor:pointer; text-align:left; }
 .dsht3-pin { flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; font:var(--dsw-font-xxs-12); padding:4px 6px; margin:6px 0; border-radius:6px; }
 .dsht3-pin:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-wake { flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; font:var(--dsw-font-xxs-12); padding:4px 6px; margin:6px 0; border-radius:6px; }
+.dsht3-wake:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-slim .dsht3-card { min-height:32px; padding:4px 8px; gap:0; }
+.dsht3-shead button, button.dsht3-shead { all:unset; cursor:pointer; min-height:28px; display:flex; align-items:center; padding:4px 8px; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); font-weight:500; width:100%; box-sizing:border-box; }
+.dsht3-shead button:hover, button.dsht3-shead:hover { color:var(--dsw-alias-label-primary); }
 .dsht3-line1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
 .dsht3-line2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-more { flex:none; width:28px; margin:6px 4px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; }
@@ -36,6 +41,9 @@ export function ensureTaskbarStyles(): void {
 .dsht3-menu { position:fixed; z-index:41; min-width:196px; padding:6px; border:1px solid var(--dsw-alias-border-l2); border-radius:12px; background:var(--dsw-specific-menu); box-shadow:var(--dsw-shadow-lv2); }
 .dsht3-menu button { width:100%; height:34px; display:flex; align-items:center; padding:0 10px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-secondary); cursor:pointer; }
 .dsht3-menu button:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-custom { display:flex; gap:4px; padding:4px 6px 6px; }
+.dsht3-custom input { flex:1; min-width:0; height:30px; border:1px solid var(--dsw-alias-border-l2); border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); font:var(--dsw-font-xxs-12); padding:0 8px; }
+.dsht3-menu .dsht3-custom button { width:auto; height:30px; padding:0 10px; }
 .dsht3-danger { color:var(--dsw-alias-state-error-primary) !important; }
 @media (hover:hover) and (pointer:fine) {
   .dsht3-more { opacity:0; }

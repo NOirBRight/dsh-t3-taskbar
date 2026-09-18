@@ -12,9 +12,19 @@ function fail(message: string): { ok: false; error: { code: 'internal'; message:
 
 function decodeCommand(value: unknown): Command | undefined {
   if (!isRecord(value) || typeof value.type !== 'string') return undefined
-  if (value.type === 'Pin' || value.type === 'Unpin') {
+  if (value.type === 'Pin' || value.type === 'Unpin' || value.type === 'Wake') {
     if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
     return { type: value.type, sessionId: value.sessionId }
+  }
+  if (value.type === 'Snooze') {
+    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
+    if (typeof value.until !== 'number') return undefined
+    const pending = value.pendingInteraction
+    if (pending === undefined) {
+      return { type: 'Snooze', sessionId: value.sessionId, until: value.until }
+    }
+    if (pending !== 'approval' && pending !== 'plan-review' && pending !== 'question') return undefined
+    return { type: 'Snooze', sessionId: value.sessionId, until: value.until, pendingInteraction: pending }
   }
   if (value.type !== 'Gc' || !Array.isArray(value.livingIds)) return undefined
   const livingIds: string[] = []

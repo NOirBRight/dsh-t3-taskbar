@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type LiveStatus, type Session } from '../taskbar.ts'
+import { project, type Card, type LiveStatus, type Session, type ViewModel } from '../taskbar.ts'
 import { discardDraft, draftsSnapshot, subscribeDrafts } from './drafts.ts'
 import { applyLedger, loadLedger, type HostLedger } from './ledger.ts'
+import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
 
 type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
+
+const SEARCH_DEBOUNCE_MS = 250
 
 function SearchIcon() {
   return (
@@ -65,36 +68,15 @@ function toSession(id: string, session: {
   return row
 }
 
-function CardRow(props: {
-  card: Card
-  pinned: boolean
-  t: Props['t']
-  onOpen: (sessionId: string) => void
-  onTogglePin: (sessionId: string, pinned: boolean) => void
-}) {
-  const { card, pinned, t, onOpen, onTogglePin } = props
-  const pinKey = pinned ? 'unpin' : 'pin'
-  return (
-    <div className="dsht3-card" aria-current={card.selected ? true : undefined}>
-      <button type="button" className="dsht3-card-main" onClick={() => onOpen(card.sessionId)}>
-        <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
-        <span className="dsht3-line2">
-          {card.unsentDraft === true ? (
-            <span className="dsht3-pen" aria-label={t('draft.pen')}><PenIcon /></span>
-          ) : null}
-          {card.sessionTitle}
-        </span>
-      </button>
-      <button
-        type="button"
-        className="dsht3-pin"
-        aria-label={t(pinKey)}
-        onClick={() => onTogglePin(card.sessionId, pinned)}
-      >
-        {t(pinKey)}
-      </button>
-    </div>
-  )
+function shelfCards(view: ViewModel): Card[] {
+  return [...view.shelves.pinned, ...view.shelves.active, ...view.shelves.snoozed, ...view.shelves.settled]
+}
+
+function liveOf(session: { pendingInteraction?: Session['pendingInteraction'] | undefined; running: boolean; completed?: boolean | undefined }): LiveStatus | undefined {
+  if (session.pendingInteraction) return 'waiting-for-me'
+  if (session.running) return 'running'
+  if (session.completed) return 'done-unread'
+  return undefined
 }
 
 export function Taskbar(props: Props) {
@@ -104,7 +86,13 @@ export function Taskbar(props: Props) {
     useSessions,
     useWorkspaces,
     open,
+    renameSession,
+    forkSession,
+    archiveSession,
+    createWorkspace,
+    searchSessions,
     useDirectoryFlow,
+    renderSlot,
     t,
   } = props
 
@@ -113,6 +101,11 @@ export function Taskbar(props: Props) {
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
   const [ledger, setLedger] = useState<HostLedger>({ revision: 0, records: {} })
   const drafts = useSyncExternalStore(subscribeDrafts, () => draftsSnapshot(list.ids))
+  const [query, setQuery] = useState('')
+  const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [flowOpen, setFlowOpen] = useState(false)
+  const [flowBusy, setFlowBusy] = useState(false)
 
   const livingKey = useMemo(
     () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
@@ -150,25 +143,97 @@ export function Taskbar(props: Props) {
     })),
   }), [list, workspaces, ledger.records, drafts])
 
-  if (!wide) {
-    return (
-      <div className="dsht3-rail">
-        <button type="button" className="dsht3-icon" aria-label={t('search.aria')} onClick={() => expandSidebar()}>
-          <SearchIcon />
-        </button>
-        {directoryFlowAvailable ? (
-          <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => expandSidebar()}>
-            <AddWorkspaceIcon />
-          </button>
-        ) : null}
-      </div>
-    )
+  const cards = shelfCards(view)
+  const draftIds = useMemo(() => new Set(view.unsentDrafts.map((card) => card.sessionId)), [view.unsentDrafts])
+  const pinnedIds = useMemo(() => new Set(view.shelves.pinned.map((card) => card.sessionId)), [view.shelves.pinned])
+  const searching = query.trim() !== ''
+
+  useEffect(() => {
+    if (!searching) {
+      setHostHits([])
+      return
+    }
+    const needle = query.trim()
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      searchSessions(needle, controller.signal).then((result) => {
+        if (controller.signal.aborted) return
+        setHostHits(result.items.map((item) => ({ sessionId: item.sessionId, snippet: item.snippet })))
+      }).catch(() => {
+        if (controller.signal.aborted) return
+        setHostHits([])
+      })
+    }, SEARCH_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [query, searchSessions, searching])
+
+  useEffect(() => {
+    const close = () => setMenu(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [])
+
+  const workspaceTitleOf = (sessionId: string, cwd: string | undefined): string => {
+    const byAccount = workspaces.items.find((workspace) => workspace.sessionIds.includes(sessionId as never))
+    if (byAccount) return byAccount.title
+    if (cwd === undefined) return ''
+    return workspaces.items.find((workspace) => cwd === workspace.path || cwd.startsWith(`${workspace.path}/`))?.title ?? ''
   }
 
-  const pinned = view.shelves.pinned
-  const active = view.shelves.active
-  const unsentDrafts = view.unsentDrafts
-  const empty = pinned.length === 0 && active.length === 0 && unsentDrafts.length === 0
+  const extraCard = (sessionId: string, snippet: string): Card | undefined => {
+    if (workspaces.archivedSessionIds.includes(sessionId as never)) return undefined
+    const session = list.byId[sessionId as never]
+    if (session === undefined) {
+      return { sessionId, workspaceTitle: '', sessionTitle: snippet, selected: list.current === sessionId }
+    }
+    if (session.origin === 'subagent') return undefined
+    const liveStatus = liveOf(session)
+    if (session.blank) {
+      const preview = drafts[sessionId]
+      if (preview === undefined || preview === '') return undefined
+      return {
+        sessionId,
+        workspaceTitle: workspaceTitleOf(sessionId, session.cwd),
+        sessionTitle: preview,
+        selected: list.current === sessionId,
+      }
+    }
+    return {
+      sessionId,
+      workspaceTitle: workspaceTitleOf(sessionId, session.cwd),
+      sessionTitle: session.displayTitle,
+      ...(liveStatus !== undefined ? { liveStatus } : {}),
+      selected: list.current === sessionId,
+      ...(drafts[sessionId] ? { unsentDraft: true as const } : {}),
+    }
+  }
+
+  const results = (() => {
+    if (!searching) return []
+    const searchable = [
+      ...view.unsentDrafts.map((card) => ({ ...card, draftPreview: card.sessionTitle })),
+      ...cards.map((card) => {
+        const preview = drafts[card.sessionId]
+        return preview === undefined ? card : { ...card, draftPreview: preview }
+      }),
+    ]
+    const known = new Map([...view.unsentDrafts, ...cards].map((card) => [card.sessionId, card]))
+    const out: Card[] = []
+    const seen = new Set<string>()
+    const push = (id: string, snippet = '') => {
+      if (seen.has(id)) return
+      const card = known.get(id) ?? extraCard(id, snippet)
+      if (card === undefined) return
+      seen.add(id)
+      out.push(card)
+    }
+    for (const id of matchingIds(searchable, query)) push(id)
+    for (const hit of hostHits) push(hit.sessionId, hit.snippet)
+    return out
+  })()
 
   const onOpen = (sessionId: string) => open(sessionId as never)
   const onTogglePin = (sessionId: string, isPinned: boolean) => {
@@ -185,66 +250,155 @@ export function Taskbar(props: Props) {
     })()
   }
 
+  const openMenu = (event: ReactMouseEvent, id: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 180, rect.bottom + 4) })
+  }
+
+  const started = (id: string) => list.byId[id as never]?.blank !== true
+
+  const renderDraft = (card: Card) => (
+    <div key={card.sessionId} className={`dsht3-row dsht3-draft${card.selected ? ' dsht3-on' : ''}`}>
+      <button
+        type="button"
+        className="dsht3-card"
+        aria-current={card.selected ? true : undefined}
+        onClick={() => onOpen(card.sessionId)}
+      >
+        <span className="dsht3-line1">{card.workspaceTitle}</span>
+        <span className="dsht3-line2">{card.sessionTitle}</span>
+      </button>
+      <button type="button" className="dsht3-discard" onClick={() => discardDraft(card.sessionId)}>
+        {t('draft.discard')}
+      </button>
+    </div>
+  )
+
+  const renderCard = (card: Card) => {
+    if (draftIds.has(card.sessionId) || (!started(card.sessionId) && drafts[card.sessionId])) {
+      return renderDraft(card)
+    }
+    const pinned = pinnedIds.has(card.sessionId)
+    const pinKey = pinned ? 'unpin' : 'pin'
+    return (
+      <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
+        <button
+          type="button"
+          className="dsht3-card"
+          aria-current={card.selected ? true : undefined}
+          onClick={() => onOpen(card.sessionId)}
+        >
+          <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
+          <span className="dsht3-line2">
+            {card.unsentDraft === true ? (
+              <span className="dsht3-pen" aria-label={t('draft.pen')}><PenIcon /></span>
+            ) : null}
+            {card.sessionTitle}
+          </span>
+        </button>
+        {started(card.sessionId) ? (
+          <>
+            <button
+              type="button"
+              className="dsht3-pin"
+              aria-label={t(pinKey)}
+              onClick={() => onTogglePin(card.sessionId, pinned)}
+            >
+              {t(pinKey)}
+            </button>
+            <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+          </>
+        ) : null}
+      </div>
+    )
+  }
+
+  const directoryFlow = flowOpen && directoryFlowAvailable ? renderSlot('sidebar.workspaces.directoryFlow', {
+    open: flowOpen,
+    busy: flowBusy,
+    onPicked: (path: string) => {
+      setFlowBusy(true)
+      void createWorkspace({ path }).finally(() => {
+        setFlowBusy(false)
+        setFlowOpen(false)
+      })
+    },
+    onCancel: () => setFlowOpen(false),
+    onError: () => setFlowOpen(false),
+  }) : null
+
+  if (!wide) {
+    return (
+      <div className="dsht3-rail">
+        <button type="button" className="dsht3-icon" aria-label={t('search.aria')} onClick={() => expandSidebar()}>
+          <SearchIcon />
+        </button>
+        {directoryFlowAvailable ? (
+          <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => { setFlowOpen(true); expandSidebar() }}>
+            <AddWorkspaceIcon />
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
+  const pinned = view.shelves.pinned
+  const active = view.shelves.active
+  const unsentDrafts = view.unsentDrafts
+  const empty = pinned.length === 0 && active.length === 0 && unsentDrafts.length === 0
+
   return (
     <div className="dsht3">
+      <div className="dsht3-head">
+        <label className="dsht3-search">
+          <input value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        {directoryFlowAvailable ? <button type="button" className="dsht3-add" onClick={() => setFlowOpen(true)}>{t('workspace.add')}</button> : null}
+        {directoryFlow}
+      </div>
       <div className="dsht3-list">
-        {empty ? <div className="dsht3-empty">{t('empty')}</div> : (
+        {searching ? (
+          results.length === 0 ? <div className="dsht3-empty">{t('search.empty')}</div> : results.map(renderCard)
+        ) : empty ? <div className="dsht3-empty">{t('empty')}</div> : (
           <>
             {/* unsent-draft */}
             {unsentDrafts.length === 0 ? null : (
               <section className="dsht3-shelf">
                 <div className="dsht3-shead">{t('draft.unsent')}</div>
-                {unsentDrafts.map((card) => (
-                  <div key={card.sessionId} className="dsht3-draft">
-                    <button
-                      type="button"
-                      className="dsht3-card"
-                      aria-current={card.selected ? true : undefined}
-                      onClick={() => onOpen(card.sessionId)}
-                    >
-                      <span className="dsht3-line1">{card.workspaceTitle}</span>
-                      <span className="dsht3-line2">{card.sessionTitle}</span>
-                    </button>
-                    <button type="button" className="dsht3-discard" onClick={() => discardDraft(card.sessionId)}>
-                      {t('draft.discard')}
-                    </button>
-                  </div>
-                ))}
+                {unsentDrafts.map(renderDraft)}
               </section>
             )}
             {pinned.length > 0 ? (
               <section className="dsht3-shelf">
                 <div className="dsht3-shead">{t('shelf.pinned')}</div>
-                {pinned.map((card) => (
-                  <CardRow
-                    key={card.sessionId}
-                    card={card}
-                    pinned
-                    t={t}
-                    onOpen={onOpen}
-                    onTogglePin={onTogglePin}
-                  />
-                ))}
+                {pinned.map(renderCard)}
               </section>
             ) : null}
             {active.length > 0 ? (
               <section className="dsht3-shelf">
                 <div className="dsht3-shead">{t('shelf.active')}</div>
-                {active.map((card) => (
-                  <CardRow
-                    key={card.sessionId}
-                    card={card}
-                    pinned={false}
-                    t={t}
-                    onOpen={onOpen}
-                    onTogglePin={onTogglePin}
-                  />
-                ))}
+                {active.map(renderCard)}
               </section>
             ) : null}
           </>
         )}
       </div>
+      {menu ? (
+        <>
+          <div className="dsht3-scrim" onClick={() => setMenu(null)} />
+          <div className="dsht3-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => {
+              const title = window.prompt(t('menu.rename'))
+              if (title) void renameSession(menu.id as never, title)
+              setMenu(null)
+            }}>{t('menu.rename')}</button>
+            <button type="button" onClick={() => { forkSession(menu.id as never); setMenu(null) }}>{t('menu.fork')}</button>
+            <button type="button" className="dsht3-danger" onClick={() => { void archiveSession(menu.id as never); setMenu(null) }}>{t('menu.archive')}</button>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }

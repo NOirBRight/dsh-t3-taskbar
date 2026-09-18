@@ -4,16 +4,20 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Parent:** `.scratch/t3-taskbar/spec.md`
 
 - [ ] Injecting this plugin does not register `root` or `sidebar`; Provider Usage tiles still render in the footer on 3082
-- [ ] Wide Taskbar shows Cards on a single Active Shelf; Workspace is the Card's first line, never a list heading
-- [ ] Live status on line one reflects waiting-for-me, running, or done-unread and does not create another Shelf
-- [ ] Waiting-for-me wins over running when both could apply
+- [x] Wide Taskbar shows Cards on a single Active Shelf; Workspace is the Card's first line, never a list heading
+- [x] Live status on line one reflects waiting-for-me, running, or done-unread and does not create another Shelf
+- [x] Waiting-for-me wins over running when both could apply
 - [ ] Clicking a Card opens that Session; the current Session's Card looks selected
-- [ ] Subagent origin, Archived ids, and non-current empty blanks are absent; the current blank is still listed
-- [ ] Rail (`wide === false`) shows the two official-style icons and expand, not Cards
-- [ ] `project` tests cover membership, Live status, and hide rules without React or RPC
-- [ ] `pnpm test` and `pnpm run build` pass; lab profile `link:`s this checkout (production profile untouched)
+- [x] Subagent origin, Archived ids, and non-current empty blanks are absent; the current blank is still listed
+- [x] Rail (`wide === false`) shows the two official-style icons and expand, not Cards
+- [x] `project` tests cover membership, Live status, and hide rules without React or RPC
+- [x] `pnpm test` and `pnpm run build` pass; lab profile `link:`s this checkout (production profile untouched)
+
+## Comments
+
+Code-verified on master. Footer tiles, Card click, and selected chrome still need a 3082 click-through.

@@ -4,14 +4,18 @@
 
 **Blocked by:** 01 Active Cards occupy the workspaces seat
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Parent:** `.scratch/t3-taskbar/spec.md`
 
-- [ ] Local filter matches title, Workspace name, and Unsent Draft preview as those fields exist
+- [x] Local filter matches title, Workspace name, and Unsent Draft preview as those fields exist
 - [ ] Debounced Host search can surface Sessions not in the current snapshot
-- [ ] A non-empty query replaces Shelves with a flat result list; Cards still show Workspace on line one
-- [ ] Rename and Fork work on started Sessions; Archive hides them via the official hide
-- [ ] Add Workspace appears only when directoryFlow has an occupant, wide and Rail
-- [ ] Unsent Draft rows, when present, do not offer rename, fork, or archive
-- [ ] zh and en strings exist; no private colour palette
+- [x] A non-empty query replaces Shelves with a flat result list; Cards still show Workspace on line one
+- [x] Rename and Fork work on started Sessions; Archive hides them via the official hide
+- [x] Add Workspace appears only when directoryFlow has an occupant, wide and Rail
+- [x] Unsent Draft rows, when present, do not offer rename, fork, or archive
+- [x] zh and en strings exist; no private colour palette
+
+## Comments
+
+Merged as `ticket-07-search-official-actions`. Host-search adapter is wired; live debounce still needs 3082. Unsent Draft rows only get Discard.

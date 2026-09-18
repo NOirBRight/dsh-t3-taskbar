@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { Taskbar } from './Taskbar.tsx'
 import { ensureTaskbarStyles } from './css.ts'
+import { bindLedgerRpc } from './ledger.ts'
 import { en, NS, zh, type TaskbarKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -28,7 +29,9 @@ function createTaskbarStore() {
 export function apply(ctx: ClientContext): void {
   ctx.locale.register(NS, { zh, en })
   ensureTaskbarStyles()
-  const hostDescription = ctx.get('connection').hostDescription
+  const connection = ctx.get('connection')
+  bindLedgerRpc(connection.rpc)
+  const hostDescription = connection.hostDescription
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
     name: 'sidebar.workspaces',
     priority: -1,

@@ -1,7 +1,10 @@
 export const NS = 't3-taskbar' as const
 
 export const zh = {
+  'shelf.pinned': '置顶',
   'shelf.active': '活跃',
+  'pin': '置顶',
+  'unpin': '取消置顶',
   'live.waiting-for-me': '等待我',
   'live.running': '运行中',
   'live.done-unread': '完成未看',
@@ -12,7 +15,10 @@ export const zh = {
 }
 
 export const en = {
+  'shelf.pinned': 'Pinned',
   'shelf.active': 'Active',
+  'pin': 'Pin',
+  'unpin': 'Unpin',
   'live.waiting-for-me': 'Waiting for me',
   'live.running': 'Running',
   'live.done-unread': 'Done unread',

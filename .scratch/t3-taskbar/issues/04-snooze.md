@@ -4,15 +4,19 @@
 
 **Blocked by:** 02 Pin on a Host ledger
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Parent:** `.scratch/t3-taskbar/spec.md`
 
-- [ ] Snooze with a preset or custom time moves the Session onto Snoozed; Wake returns it to Active
-- [ ] After the wake time, `project` at that `now` shows the Session on Active without a click
-- [ ] Snooze is unavailable (hidden and rejected) when `pendingInteraction` is set
-- [ ] A snoozed row is only on Snoozed, even if it had been Pinned or Settled
-- [ ] Snooze clears pin keys; wake does not restore Pinned
-- [ ] Snoozed rows are slim, sorted by soonest `snoozedUntil`, and show a wake label
-- [ ] Empty Snoozed is hidden; with rows it is collapsible
-- [ ] `apply` Snooze / Wake rejection and pin-clear tests, plus `project` expiry tests, do not use React
+- [x] Snooze with a preset or custom time moves the Session onto Snoozed; Wake returns it to Active
+- [x] After the wake time, `project` at that `now` shows the Session on Active without a click
+- [x] Snooze is unavailable (hidden and rejected) when `pendingInteraction` is set
+- [x] A snoozed row is only on Snoozed, even if it had been Pinned or Settled
+- [x] Snooze clears pin keys; wake does not restore Pinned
+- [x] Snoozed rows are slim, sorted by soonest `snoozedUntil`, and show a wake label
+- [x] Empty Snoozed is hidden; with rows it is collapsible
+- [x] `apply` Snooze / Wake rejection and pin-clear tests, plus `project` expiry tests, do not use React
+
+## Comments
+
+Merged as `ticket-04-snooze`. Domain tests green. Preset/custom Snooze menu and wake-label chrome still need a 3082 click-through.

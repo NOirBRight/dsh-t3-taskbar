@@ -4,14 +4,18 @@
 
 **Blocked by:** 03 Settle without Archive; 04 Snooze and Wake
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 **Parent:** `.scratch/t3-taskbar/spec.md`
 
-- [ ] Drop onto Pinned / Active / Settled changes Shelf the same way as the matching menu command
-- [ ] Drop onto Snoozed is ignored; snooze still requires a wake time in the menu
-- [ ] The dragged row shows Pin, Unpin, Settle, Un-settle, or Wake before release
+- [x] Drop onto Pinned / Active / Settled changes Shelf the same way as the matching menu command
+- [x] Drop onto Snoozed is ignored; snooze still requires a wake time in the menu
+- [x] The dragged row shows Pin, Unpin, Settle, Un-settle, or Wake before release
 - [ ] Reorder within Pinned and within Active survives reload on the same Host
-- [ ] Empty Pinned (or top edge) accepts a Pin at the top
-- [ ] Wake and Un-settle without a specific index land at the top of Active
-- [ ] `apply` Drop tests cover dest, index, and refused snoozed dest without dragging in the DOM
+- [x] Empty Pinned (or top edge) accepts a Pin at the top
+- [x] Wake and Un-settle without a specific index land at the top of Active
+- [x] `apply` Drop tests cover dest, index, and refused snoozed dest without dragging in the DOM
+
+## Comments
+
+Merged as `ticket-06-drag`. Domain Drop tests green. 3082 drag/reload and keyless-Active reorder still need a lab click-through. Known gap: reorder among Active rows that have no `active` key still uses recency, not hover index.

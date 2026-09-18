@@ -12,9 +12,12 @@ export function ensureTaskbarStyles(): void {
 .dsht3-list { min-height:0; flex:1; overflow:auto; padding:4px 6px 12px; }
 .dsht3-shelf { margin:2px 0 8px; }
 .dsht3-shead { min-height:28px; display:flex; align-items:center; padding:4px 8px; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); font-weight:500; }
-.dsht3-card { width:100%; min-height:44px; display:flex; flex-direction:column; justify-content:center; gap:2px; padding:6px 8px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); cursor:pointer; text-align:left; }
+.dsht3-card { width:100%; min-height:44px; display:flex; flex-direction:row; align-items:center; gap:4px; padding:0 4px 0 0; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); }
 .dsht3-card:hover { background:var(--dsw-specific-sidebar-nav-item-hover); }
 .dsht3-card[aria-current="true"] { background:var(--dsw-specific-sidebar-nav-item-active); }
+.dsht3-card-main { flex:1; min-width:0; min-height:44px; display:flex; flex-direction:column; justify-content:center; gap:2px; padding:6px 8px; border:0; border-radius:8px; background:transparent; color:inherit; cursor:pointer; text-align:left; }
+.dsht3-pin { flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; font:var(--dsw-font-xxs-12); padding:4px 6px; border-radius:6px; }
+.dsht3-pin:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
 .dsht3-line1 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
 .dsht3-line2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-empty { padding:24px 12px; color:var(--dsw-alias-label-tertiary); }

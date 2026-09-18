@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type LiveStatus, type Session } from '../taskbar.ts'
+import { project, type Card, type LiveStatus, type Session } from '../taskbar.ts'
+import { applyLedger, loadLedger, type HostLedger } from './ledger.ts'
 import type { TaskbarKey } from './locales.ts'
 
 type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
@@ -55,6 +56,33 @@ function toSession(id: string, session: {
   return row
 }
 
+function CardRow(props: {
+  card: Card
+  pinned: boolean
+  t: Props['t']
+  onOpen: (sessionId: string) => void
+  onTogglePin: (sessionId: string, pinned: boolean) => void
+}) {
+  const { card, pinned, t, onOpen, onTogglePin } = props
+  const pinKey = pinned ? 'unpin' : 'pin'
+  return (
+    <div className="dsht3-card" aria-current={card.selected ? true : undefined}>
+      <button type="button" className="dsht3-card-main" onClick={() => onOpen(card.sessionId)}>
+        <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
+        <span className="dsht3-line2">{card.sessionTitle}</span>
+      </button>
+      <button
+        type="button"
+        className="dsht3-pin"
+        aria-label={t(pinKey)}
+        onClick={() => onTogglePin(card.sessionId, pinned)}
+      >
+        {t(pinKey)}
+      </button>
+    </div>
+  )
+}
+
 export function Taskbar(props: Props) {
   const {
     wide,
@@ -69,10 +97,30 @@ export function Taskbar(props: Props) {
   const list = useSessions((state) => state)
   const workspaces = useWorkspaces((state) => state)
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
+  const [ledger, setLedger] = useState<HostLedger>({ revision: 0, records: {} })
+
+  const livingKey = useMemo(
+    () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
+    [list.ids, workspaces.archivedSessionIds],
+  )
+
+  useEffect(() => {
+    if (list.phase !== 'ready') return
+    let cancelled = false
+    const livingIds = livingKey === '' ? [] : livingKey.split('\0')
+    void loadLedger().then(async (loaded) => {
+      if (cancelled) return
+      const next = await applyLedger({ type: 'Gc', livingIds }, loaded.revision)
+      if (cancelled) return
+      setLedger(next ?? loaded)
+    })
+    return () => { cancelled = true }
+  }, [livingKey, list.phase])
 
   const view = useMemo(() => project({
     ...(list.current !== undefined ? { current: list.current } : {}),
     archivedSessionIds: workspaces.archivedSessionIds,
+    ledger: ledger.records,
     sessions: list.ids.flatMap((id) => {
       const session = list.byId[id]
       if (session === undefined) return []
@@ -84,7 +132,7 @@ export function Taskbar(props: Props) {
       path: workspace.path,
       sessionIds: workspace.sessionIds,
     })),
-  }), [list, workspaces])
+  }), [list, workspaces, ledger.records])
 
   if (!wide) {
     return (
@@ -101,26 +149,61 @@ export function Taskbar(props: Props) {
     )
   }
 
+  const pinned = view.shelves.pinned
   const active = view.shelves.active
+  const empty = pinned.length === 0 && active.length === 0
+
+  const onOpen = (sessionId: string) => open(sessionId as never)
+  const onTogglePin = (sessionId: string, isPinned: boolean) => {
+    void (async () => {
+      const command = isPinned ? { type: 'Unpin' as const, sessionId } : { type: 'Pin' as const, sessionId }
+      const next = await applyLedger(command, ledger.revision)
+      if (next !== undefined) {
+        setLedger(next)
+        return
+      }
+      const loaded = await loadLedger()
+      const retried = await applyLedger(command, loaded.revision)
+      setLedger(retried ?? loaded)
+    })()
+  }
+
   return (
     <div className="dsht3">
       <div className="dsht3-list">
-        {active.length === 0 ? <div className="dsht3-empty">{t('empty')}</div> : (
-          <section className="dsht3-shelf">
-            <div className="dsht3-shead">{t('shelf.active')}</div>
-            {active.map((card) => (
-              <button
-                key={card.sessionId}
-                type="button"
-                className="dsht3-card"
-                aria-current={card.selected ? true : undefined}
-                onClick={() => open(card.sessionId as never)}
-              >
-                <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
-                <span className="dsht3-line2">{card.sessionTitle}</span>
-              </button>
-            ))}
-          </section>
+        {empty ? <div className="dsht3-empty">{t('empty')}</div> : (
+          <>
+            {pinned.length > 0 ? (
+              <section className="dsht3-shelf">
+                <div className="dsht3-shead">{t('shelf.pinned')}</div>
+                {pinned.map((card) => (
+                  <CardRow
+                    key={card.sessionId}
+                    card={card}
+                    pinned
+                    t={t}
+                    onOpen={onOpen}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
+              </section>
+            ) : null}
+            {active.length > 0 ? (
+              <section className="dsht3-shelf">
+                <div className="dsht3-shead">{t('shelf.active')}</div>
+                {active.map((card) => (
+                  <CardRow
+                    key={card.sessionId}
+                    card={card}
+                    pinned={false}
+                    t={t}
+                    onOpen={onOpen}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
+              </section>
+            ) : null}
+          </>
         )}
       </div>
     </div>

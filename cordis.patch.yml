@@ -1,0 +1,4 @@
+# Occupy sidebar.workspaces; do not register root or sidebar.
+- insert:
+    - id: t3-taskbar
+      name: 'dsh-t3-taskbar'

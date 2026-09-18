@@ -49,6 +49,11 @@ export function ensureTaskbarStyles(): void {
 .dsht3-custom input { flex:1; min-width:0; height:30px; border:1px solid var(--dsw-alias-border-l2); border-radius:8px; background:transparent; color:var(--dsw-alias-label-primary); font:var(--dsw-font-xxs-12); padding:0 8px; }
 .dsht3-menu .dsht3-custom button { width:auto; height:30px; padding:0 10px; }
 .dsht3-danger { color:var(--dsw-alias-state-error-primary) !important; }
+.dsht3-row[draggable="true"] { cursor:grab; }
+.dsht3-dragging { opacity:0.55; }
+.dsht3-shelf.dsht3-drop { box-shadow:inset 0 0 0 1px var(--dsw-alias-border-l2); border-radius:8px; }
+.dsht3-verb { flex:none; align-self:center; padding:0 8px; color:var(--dsw-alias-label-secondary); font:var(--dsw-font-xxs-12); }
+.dsht3-dropzone { min-height:10px; }
 @media (hover:hover) and (pointer:fine) {
   .dsht3-more { opacity:0; }
   .dsht3-row:hover .dsht3-more, .dsht3-row.dsht3-on .dsht3-more { opacity:1; }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { project, type Card, type Command, type LiveStatus, type Session, type ViewModel } from '../taskbar.ts'
@@ -8,6 +8,7 @@ import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
 
 type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
+type DropDest = 'pinned' | 'active' | 'settled'
 
 const SEARCH_DEBOUNCE_MS = 250
 const HOUR_MS = 60 * 60 * 1000
@@ -145,6 +146,8 @@ export function Taskbar(props: Props) {
   const [now, setNow] = useState(() => Date.now())
   const [flowOpen, setFlowOpen] = useState(false)
   const [flowBusy, setFlowBusy] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropHint, setDropHint] = useState<{ dest: DropDest; index: number } | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), NOW_TICK_MS)
@@ -315,6 +318,69 @@ export function Taskbar(props: Props) {
   }
 
   const started = (id: string) => list.byId[id as never]?.blank !== true
+  const dragging = dragId !== null
+
+  const dropCommand = (sessionId: string, dest: DropDest, index: number): Command => {
+    if (dest === 'settled') return { type: 'Drop', sessionId, dest, index, at: Date.now() }
+    return { type: 'Drop', sessionId, dest, index }
+  }
+
+  const dropVerbOf = (sessionId: string, dest: DropDest): TaskbarKey | undefined => {
+    if (dest === 'pinned') return 'pin'
+    if (dest === 'settled') return 'settle'
+    if (pinnedIds.has(sessionId)) return 'unpin'
+    if (snoozedIds.has(sessionId)) return 'wake'
+    if (settledIds.has(sessionId)) return 'unsettle'
+    return undefined
+  }
+
+  const bindDest = (dest: DropDest, index: number) => ({
+    onDragOver: (event: ReactDragEvent<HTMLElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'move'
+      setDropHint({ dest, index })
+    },
+    onDrop: (event: ReactDragEvent<HTMLElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const source = event.dataTransfer.getData('text/plain') || dragId
+      setDragId(null)
+      setDropHint(null)
+      if (!source) return
+      send(dropCommand(source, dest, index))
+    },
+  })
+
+  const bindDrag = (sessionId: string, drop?: { dest: DropDest; index: number }) => ({
+    draggable: true as const,
+    onDragStart: (event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.setData('text/plain', sessionId)
+      event.dataTransfer.effectAllowed = 'move'
+      setDragId(sessionId)
+    },
+    onDragEnd: () => {
+      setDragId(null)
+      setDropHint(null)
+    },
+    ...(drop === undefined ? {} : bindDest(drop.dest, drop.index)),
+  })
+
+  const dragVerb = (sessionId: string) => {
+    if (dragId !== sessionId || dropHint === null) return null
+    const key = dropVerbOf(sessionId, dropHint.dest)
+    if (key === undefined) return null
+    return <span className="dsht3-verb">{t(key)}</span>
+  }
+
+  const openOnKey = (sessionId: string) => (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onOpen(sessionId)
+  }
+
+  const rowClass = (card: Card) =>
+    `dsht3-row${card.selected ? ' dsht3-on' : ''}${dragId === card.sessionId ? ' dsht3-dragging' : ''}`
 
   const renderDraft = (card: Card) => (
     <div key={card.sessionId} className={`dsht3-row dsht3-draft${card.selected ? ' dsht3-on' : ''}`}>
@@ -336,36 +402,49 @@ export function Taskbar(props: Props) {
   const renderSnoozed = (card: Card) => {
     const until = ledger.records[card.sessionId]?.snoozedUntil
     return (
-      <div key={card.sessionId} className={`dsht3-row dsht3-slim${card.selected ? ' dsht3-on' : ''}`}>
-        <button
-          type="button"
+      <div
+        key={card.sessionId}
+        className={`${rowClass(card)} dsht3-slim`}
+        {...(searching ? {} : bindDrag(card.sessionId))}
+      >
+        <div
           className="dsht3-card"
+          role="button"
+          tabIndex={0}
           aria-current={card.selected ? true : undefined}
           onClick={() => onOpen(card.sessionId)}
+          onKeyDown={openOnKey(card.sessionId)}
         >
           <span className="dsht3-line2">{card.sessionTitle}</span>
           <span className="dsht3-line1">
             {until === undefined ? '' : `${t('snooze.until')} ${formatWake(until)}`}
           </span>
-        </button>
+        </div>
         <button type="button" className="dsht3-wake" onClick={() => send({ type: 'Wake', sessionId: card.sessionId })}>
           {t('wake')}
         </button>
         <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+        {dragVerb(card.sessionId)}
       </div>
     )
   }
 
-  const renderSettled = (card: Card) => (
-    <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
-      <button
-        type="button"
+  const renderSettled = (card: Card, index = 0) => (
+    <div
+      key={card.sessionId}
+      className={rowClass(card)}
+      {...(searching ? {} : bindDrag(card.sessionId, { dest: 'settled', index }))}
+    >
+      <div
         className="dsht3-slim"
+        role="button"
+        tabIndex={0}
         aria-current={card.selected ? true : undefined}
         onClick={() => onOpen(card.sessionId)}
+        onKeyDown={openOnKey(card.sessionId)}
       >
         {card.sessionTitle}
-      </button>
+      </div>
       <button
         type="button"
         className="dsht3-unsettle"
@@ -374,24 +453,31 @@ export function Taskbar(props: Props) {
         {t('unsettle')}
       </button>
       <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+      {dragVerb(card.sessionId)}
     </div>
   )
 
-  const renderCard = (card: Card) => {
+  const renderCard = (card: Card, drop?: { dest: DropDest; index: number }) => {
     if (draftIds.has(card.sessionId) || (!started(card.sessionId) && drafts[card.sessionId])) {
       return renderDraft(card)
     }
     if (snoozedIds.has(card.sessionId)) return renderSnoozed(card)
-    if (settledIds.has(card.sessionId) || card.slim === true) return renderSettled(card)
+    if (settledIds.has(card.sessionId) || card.slim === true) return renderSettled(card, drop?.index)
     const pinned = pinnedIds.has(card.sessionId)
     const pinKey = pinned ? 'unpin' : 'pin'
     return (
-      <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
-        <button
-          type="button"
+      <div
+        key={card.sessionId}
+        className={rowClass(card)}
+        {...(searching || !started(card.sessionId) ? {} : bindDrag(card.sessionId, drop))}
+      >
+        <div
           className="dsht3-card"
+          role="button"
+          tabIndex={0}
           aria-current={card.selected ? true : undefined}
           onClick={() => onOpen(card.sessionId)}
+          onKeyDown={openOnKey(card.sessionId)}
         >
           <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
           <span className="dsht3-line2">
@@ -400,7 +486,7 @@ export function Taskbar(props: Props) {
             ) : null}
             {card.sessionTitle}
           </span>
-        </button>
+        </div>
         {started(card.sessionId) ? (
           <>
             <button
@@ -414,6 +500,7 @@ export function Taskbar(props: Props) {
             <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
           </>
         ) : null}
+        {dragVerb(card.sessionId)}
       </div>
     )
   }
@@ -465,7 +552,7 @@ export function Taskbar(props: Props) {
       </div>
       <div className="dsht3-list">
         {searching ? (
-          results.length === 0 ? <div className="dsht3-empty">{t('search.empty')}</div> : results.map(renderCard)
+          results.length === 0 ? <div className="dsht3-empty">{t('search.empty')}</div> : results.map((card) => renderCard(card))
         ) : empty ? <div className="dsht3-empty">{t('empty')}</div> : (
           <>
             {/* unsent-draft */}
@@ -475,21 +562,23 @@ export function Taskbar(props: Props) {
                 {unsentDrafts.map(renderDraft)}
               </section>
             )}
-            {pinned.length > 0 ? (
-              <section className="dsht3-shelf">
+            {pinned.length > 0 || dragging ? (
+              <section className={`dsht3-shelf${dropHint?.dest === 'pinned' ? ' dsht3-drop' : ''}`} {...bindDest('pinned', 0)}>
                 <div className="dsht3-shead">{t('shelf.pinned')}</div>
-                {pinned.map(renderCard)}
+                {pinned.map((card, index) => renderCard(card, { dest: 'pinned', index }))}
+                {dragging ? <div className="dsht3-dropzone" {...bindDest('pinned', pinned.length)} /> : null}
               </section>
             ) : null}
-            {active.length > 0 ? (
-              <section className="dsht3-shelf">
+            {active.length > 0 || dragging ? (
+              <section className={`dsht3-shelf${dropHint?.dest === 'active' ? ' dsht3-drop' : ''}`} {...bindDest('active', 0)}>
                 <div className="dsht3-shead">{t('shelf.active')}</div>
-                {active.map(renderCard)}
+                {active.map((card, index) => renderCard(card, { dest: 'active', index }))}
+                {dragging ? <div className="dsht3-dropzone" {...bindDest('active', active.length)} /> : null}
               </section>
             ) : null}
             {/* snoozed */}
             {snoozed.length === 0 ? null : (
-              <section className="dsht3-shelf">
+              <section className="dsht3-shelf" onDragOver={() => setDropHint(null)}>
                 <button type="button" className="dsht3-shead dsht3-stoggle" onClick={() => setSnoozedOpen((was) => !was)}>
                   {snoozedOpen ? '▾' : '▸'} {t('shelf.snoozed')}
                 </button>
@@ -497,17 +586,22 @@ export function Taskbar(props: Props) {
               </section>
             )}
             {/* settled */}
-            {settled.length === 0 ? null : (
-              <section className="dsht3-shelf">
-                <button
-                  type="button"
-                  className="dsht3-shead dsht3-stoggle"
-                  aria-expanded={settledOpen}
-                  onClick={() => setSettledOpen((wasOpen) => !wasOpen)}
-                >
-                  {settledOpen ? '▾' : '▸'} {t('shelf.settled')}
-                </button>
-                {settledOpen ? settled.map(renderSettled) : null}
+            {settled.length === 0 && !dragging ? null : (
+              <section className={`dsht3-shelf${dropHint?.dest === 'settled' ? ' dsht3-drop' : ''}`} {...bindDest('settled', 0)}>
+                {settled.length === 0 ? (
+                  <div className="dsht3-shead">{t('shelf.settled')}</div>
+                ) : (
+                  <button
+                    type="button"
+                    className="dsht3-shead dsht3-stoggle"
+                    aria-expanded={settledOpen}
+                    onClick={() => setSettledOpen((wasOpen) => !wasOpen)}
+                  >
+                    {settledOpen ? '▾' : '▸'} {t('shelf.settled')}
+                  </button>
+                )}
+                {settledOpen ? settled.map((card, index) => renderSettled(card, index)) : null}
+                {dragging ? <div className="dsht3-dropzone" {...bindDest('settled', settled.length)} /> : null}
               </section>
             )}
           </>

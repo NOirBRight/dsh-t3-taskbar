@@ -67,6 +67,7 @@ export type Command =
   | { readonly type: 'Unsettle'; readonly sessionId: string }
   | { readonly type: 'Snooze'; readonly sessionId: string; readonly until: number; readonly pendingInteraction?: PendingKind }
   | { readonly type: 'Wake'; readonly sessionId: string }
+  | { readonly type: 'Drop'; readonly sessionId: string; readonly dest: 'pinned' | 'active' | 'settled'; readonly index: number; readonly at?: number }
   | { readonly type: 'Gc'; readonly livingIds: readonly string[] }
 
 function nextOrderKey(ledger: Ledger, field: 'pin' | 'active'): number {
@@ -77,6 +78,20 @@ function nextOrderKey(ledger: Ledger, field: 'pin' | 'active'): number {
     if (min === undefined || key < min) min = key
   }
   return min === undefined ? 0 : min - 1
+}
+
+function orderKeyAt(ledger: Ledger, field: 'pin' | 'active', sessionId: string, index: number): number {
+  const keys: number[] = []
+  for (const [id, entry] of Object.entries(ledger)) {
+    if (id === sessionId) continue
+    const key = entry[field]
+    if (key === undefined) continue
+    keys.push(key)
+  }
+  keys.sort((a, b) => a - b)
+  if (keys.length === 0 || index <= 0) return keys.length === 0 ? 0 : keys[0]! - 1
+  if (index >= keys.length) return keys[keys.length - 1]! + 1
+  return (keys[index - 1]! + keys[index]!) / 2
 }
 
 /** Snooze (ticket 04) must clear pin keys the same way — wake is always Active. */
@@ -116,6 +131,27 @@ export function apply(ledger: Ledger, command: Command): Ledger {
   }
   if (command.type === 'Wake') {
     return write(ledger, command.sessionId, { active: nextOrderKey(ledger, 'active') })
+  }
+  if (command.type === 'Drop') {
+    if (command.dest === 'pinned') {
+      return write(ledger, command.sessionId, { pin: orderKeyAt(ledger, 'pin', command.sessionId, command.index) })
+    }
+    if (command.dest === 'active') {
+      const entry = ledger[command.sessionId]
+      const fromPinned = entry?.pin !== undefined && entry.snoozedUntil === undefined && entry.settledAt === undefined
+      if (fromPinned && command.index <= 0) {
+        if (entry === undefined) return ledger
+        return write(ledger, command.sessionId, withoutPin(entry))
+      }
+      return write(ledger, command.sessionId, {
+        active: orderKeyAt(ledger, 'active', command.sessionId, command.index),
+      })
+    }
+    if (command.dest === 'settled') {
+      if (command.at === undefined) return ledger
+      return write(ledger, command.sessionId, { settledAt: command.at })
+    }
+    return ledger
   }
   const living = new Set(command.livingIds)
   const next: Record<string, LedgerEntry> = {}

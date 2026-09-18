@@ -32,6 +32,7 @@ export interface ProjectInput {
   archivedSessionIds: readonly string[]
   ledger?: Ledger
   drafts?: Readonly<Record<string, string>>
+  now?: number
 }
 
 export interface Card {
@@ -64,22 +65,16 @@ export type Command =
   | { readonly type: 'Unpin'; readonly sessionId: string }
   | { readonly type: 'Settle'; readonly sessionId: string; readonly at: number }
   | { readonly type: 'Unsettle'; readonly sessionId: string }
+  | { readonly type: 'Snooze'; readonly sessionId: string; readonly until: number; readonly pendingInteraction?: PendingKind }
+  | { readonly type: 'Wake'; readonly sessionId: string }
   | { readonly type: 'Gc'; readonly livingIds: readonly string[] }
 
-function nextPinKey(ledger: Ledger): number {
+function nextOrderKey(ledger: Ledger, field: 'pin' | 'active'): number {
   let min: number | undefined
   for (const entry of Object.values(ledger)) {
-    if (entry.pin === undefined) continue
-    if (min === undefined || entry.pin < min) min = entry.pin
-  }
-  return min === undefined ? 0 : min - 1
-}
-
-function nextActiveKey(ledger: Ledger): number {
-  let min: number | undefined
-  for (const entry of Object.values(ledger)) {
-    if (entry.active === undefined) continue
-    if (min === undefined || entry.active < min) min = entry.active
+    const key = entry[field]
+    if (key === undefined) continue
+    if (min === undefined || key < min) min = key
   }
   return min === undefined ? 0 : min - 1
 }
@@ -102,7 +97,7 @@ function write(ledger: Ledger, sessionId: string, entry: LedgerEntry | undefined
 
 export function apply(ledger: Ledger, command: Command): Ledger {
   if (command.type === 'Pin') {
-    return write(ledger, command.sessionId, { pin: nextPinKey(ledger) })
+    return write(ledger, command.sessionId, { pin: nextOrderKey(ledger, 'pin') })
   }
   if (command.type === 'Unpin') {
     const entry = ledger[command.sessionId]
@@ -113,7 +108,14 @@ export function apply(ledger: Ledger, command: Command): Ledger {
     return write(ledger, command.sessionId, { settledAt: command.at })
   }
   if (command.type === 'Unsettle') {
-    return write(ledger, command.sessionId, { active: nextActiveKey(ledger) })
+    return write(ledger, command.sessionId, { active: nextOrderKey(ledger, 'active') })
+  }
+  if (command.type === 'Snooze') {
+    if (command.pendingInteraction !== undefined) return ledger
+    return write(ledger, command.sessionId, { snoozedUntil: command.until })
+  }
+  if (command.type === 'Wake') {
+    return write(ledger, command.sessionId, { active: nextOrderKey(ledger, 'active') })
   }
   const living = new Set(command.livingIds)
   const next: Record<string, LedgerEntry> = {}
@@ -170,9 +172,11 @@ export function project(input: ProjectInput): ViewModel {
     return true
   })
   const ledger = input.ledger ?? {}
+  const now = input.now
   const unsentDrafts: Card[] = []
   const pinned: Card[] = []
   const active: Card[] = []
+  const snoozed: Card[] = []
   const settled: Card[] = []
   for (const session of listed) {
     const draft = draftOf(input, session.id)
@@ -184,20 +188,26 @@ export function project(input: ProjectInput): ViewModel {
       if (session.id !== input.current) continue
     }
     const entry = ledger[session.id]
+    const until = entry?.snoozedUntil
+    const snoozing = until !== undefined && now !== undefined && until > now
+    const settling = !snoozing && entry?.settledAt !== undefined
     const card = toCard(
       session,
       input.workspaces,
       input.current,
       {
         ...(draft !== '' ? { unsentDraft: true as const } : {}),
-        ...(entry?.settledAt !== undefined ? { slim: true as const } : {}),
+        ...(snoozing || settling ? { slim: true as const } : {}),
       },
     )
-    if (entry?.settledAt !== undefined) settled.push(card)
+    if (snoozing) snoozed.push(card)
+    else if (settling) settled.push(card)
     else if (entry?.pin !== undefined) pinned.push(card)
     else active.push(card)
   }
   pinned.sort((a, b) => (ledger[a.sessionId]?.pin ?? 0) - (ledger[b.sessionId]?.pin ?? 0))
+  snoozed.sort((a, b) => (ledger[a.sessionId]?.snoozedUntil ?? 0) - (ledger[b.sessionId]?.snoozedUntil ?? 0))
+  settled.sort((a, b) => (ledger[b.sessionId]?.settledAt ?? 0) - (ledger[a.sessionId]?.settledAt ?? 0))
   active.sort((a, b) => {
     const left = ledger[a.sessionId]?.active
     const right = ledger[b.sessionId]?.active
@@ -206,13 +216,12 @@ export function project(input: ProjectInput): ViewModel {
     if (right !== undefined) return 1
     return 0
   })
-  settled.sort((a, b) => (ledger[b.sessionId]?.settledAt ?? 0) - (ledger[a.sessionId]?.settledAt ?? 0))
   return {
     unsentDrafts,
     shelves: {
       pinned,
       active,
-      snoozed: [],
+      snoozed,
       settled,
     },
   }

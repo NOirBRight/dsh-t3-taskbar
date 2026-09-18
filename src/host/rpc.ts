@@ -10,20 +10,32 @@ function fail(message: string): { ok: false; error: { code: 'internal'; message:
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
+function sessionIdOf(value: Record<string, unknown>): string | undefined {
+  if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
+  return value.sessionId
+}
+
 function decodeCommand(value: unknown): Command | undefined {
   if (!isRecord(value) || typeof value.type !== 'string') return undefined
-  if (value.type === 'Pin' || value.type === 'Unpin') {
-    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
-    return { type: value.type, sessionId: value.sessionId }
+  if (value.type === 'Pin' || value.type === 'Unpin' || value.type === 'Wake' || value.type === 'Unsettle') {
+    const sessionId = sessionIdOf(value)
+    if (sessionId === undefined) return undefined
+    return { type: value.type, sessionId }
   }
   if (value.type === 'Settle') {
-    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
-    if (typeof value.at !== 'number') return undefined
-    return { type: 'Settle', sessionId: value.sessionId, at: value.at }
+    const sessionId = sessionIdOf(value)
+    if (sessionId === undefined || typeof value.at !== 'number') return undefined
+    return { type: 'Settle', sessionId, at: value.at }
   }
-  if (value.type === 'Unsettle') {
-    if (typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
-    return { type: 'Unsettle', sessionId: value.sessionId }
+  if (value.type === 'Snooze') {
+    const sessionId = sessionIdOf(value)
+    if (sessionId === undefined || typeof value.until !== 'number') return undefined
+    const pending = value.pendingInteraction
+    if (pending === undefined) {
+      return { type: 'Snooze', sessionId, until: value.until }
+    }
+    if (pending !== 'approval' && pending !== 'plan-review' && pending !== 'question') return undefined
+    return { type: 'Snooze', sessionId, until: value.until, pendingInteraction: pending }
   }
   if (value.type !== 'Gc' || !Array.isArray(value.livingIds)) return undefined
   const livingIds: string[] = []

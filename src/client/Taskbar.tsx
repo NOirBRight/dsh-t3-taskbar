@@ -10,6 +10,40 @@ import type { TaskbarKey } from './locales.ts'
 type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
 
 const SEARCH_DEBOUNCE_MS = 250
+const HOUR_MS = 60 * 60 * 1000
+const NOW_TICK_MS = 1000
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function toDatetimeLocal(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+function laterToday18(now: number): number | undefined {
+  const d = new Date(now)
+  d.setHours(18, 0, 0, 0)
+  const until = d.getTime()
+  return until > now ? until : undefined
+}
+
+function tomorrow09(now: number): number {
+  const d = new Date(now)
+  d.setDate(d.getDate() + 1)
+  d.setHours(9, 0, 0, 0)
+  return d.getTime()
+}
+
+function formatWake(until: number): string {
+  return new Date(until).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
 
 function SearchIcon() {
   return (
@@ -104,9 +138,18 @@ export function Taskbar(props: Props) {
   const [query, setQuery] = useState('')
   const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [snoozePanel, setSnoozePanel] = useState(false)
+  const [customUntil, setCustomUntil] = useState('')
+  const [snoozedOpen, setSnoozedOpen] = useState(true)
+  const [settledOpen, setSettledOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
   const [flowOpen, setFlowOpen] = useState(false)
   const [flowBusy, setFlowBusy] = useState(false)
-  const [settledOpen, setSettledOpen] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), NOW_TICK_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const livingKey = useMemo(
     () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
@@ -131,6 +174,7 @@ export function Taskbar(props: Props) {
     archivedSessionIds: workspaces.archivedSessionIds,
     ledger: ledger.records,
     drafts,
+    now,
     sessions: list.ids.flatMap((id) => {
       const session = list.byId[id]
       if (session === undefined) return []
@@ -142,11 +186,12 @@ export function Taskbar(props: Props) {
       path: workspace.path,
       sessionIds: workspace.sessionIds,
     })),
-  }), [list, workspaces, ledger.records, drafts])
+  }), [list, workspaces, ledger.records, drafts, now])
 
   const cards = shelfCards(view)
   const draftIds = useMemo(() => new Set(view.unsentDrafts.map((card) => card.sessionId)), [view.unsentDrafts])
   const pinnedIds = useMemo(() => new Set(view.shelves.pinned.map((card) => card.sessionId)), [view.shelves.pinned])
+  const snoozedIds = useMemo(() => new Set(view.shelves.snoozed.map((card) => card.sessionId)), [view.shelves.snoozed])
   const settledIds = useMemo(() => new Set(view.shelves.settled.map((card) => card.sessionId)), [view.shelves.settled])
   const searching = query.trim() !== ''
 
@@ -253,12 +298,20 @@ export function Taskbar(props: Props) {
   const onTogglePin = (sessionId: string, isPinned: boolean) => {
     send(isPinned ? { type: 'Unpin', sessionId } : { type: 'Pin', sessionId })
   }
+  const onSnooze = (sessionId: string, until: number) => {
+    const pending = list.byId[sessionId as never]?.pendingInteraction
+    send(pending === undefined
+      ? { type: 'Snooze', sessionId, until }
+      : { type: 'Snooze', sessionId, until, pendingInteraction: pending })
+  }
 
   const openMenu = (event: ReactMouseEvent, id: string) => {
     event.preventDefault()
     event.stopPropagation()
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-    setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 240, rect.bottom + 4) })
+    setSnoozePanel(false)
+    setCustomUntil(toDatetimeLocal(Date.now() + HOUR_MS))
+    setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 280, rect.bottom + 4) })
   }
 
   const started = (id: string) => list.byId[id as never]?.blank !== true
@@ -280,10 +333,56 @@ export function Taskbar(props: Props) {
     </div>
   )
 
+  const renderSnoozed = (card: Card) => {
+    const until = ledger.records[card.sessionId]?.snoozedUntil
+    return (
+      <div key={card.sessionId} className={`dsht3-row dsht3-slim${card.selected ? ' dsht3-on' : ''}`}>
+        <button
+          type="button"
+          className="dsht3-card"
+          aria-current={card.selected ? true : undefined}
+          onClick={() => onOpen(card.sessionId)}
+        >
+          <span className="dsht3-line2">{card.sessionTitle}</span>
+          <span className="dsht3-line1">
+            {until === undefined ? '' : `${t('snooze.until')} ${formatWake(until)}`}
+          </span>
+        </button>
+        <button type="button" className="dsht3-wake" onClick={() => send({ type: 'Wake', sessionId: card.sessionId })}>
+          {t('wake')}
+        </button>
+        <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+      </div>
+    )
+  }
+
+  const renderSettled = (card: Card) => (
+    <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
+      <button
+        type="button"
+        className="dsht3-slim"
+        aria-current={card.selected ? true : undefined}
+        onClick={() => onOpen(card.sessionId)}
+      >
+        {card.sessionTitle}
+      </button>
+      <button
+        type="button"
+        className="dsht3-unsettle"
+        onClick={() => send({ type: 'Unsettle', sessionId: card.sessionId })}
+      >
+        {t('unsettle')}
+      </button>
+      <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+    </div>
+  )
+
   const renderCard = (card: Card) => {
     if (draftIds.has(card.sessionId) || (!started(card.sessionId) && drafts[card.sessionId])) {
       return renderDraft(card)
     }
+    if (snoozedIds.has(card.sessionId)) return renderSnoozed(card)
+    if (settledIds.has(card.sessionId) || card.slim === true) return renderSettled(card)
     const pinned = pinnedIds.has(card.sessionId)
     const pinKey = pinned ? 'unpin' : 'pin'
     return (
@@ -319,27 +418,6 @@ export function Taskbar(props: Props) {
     )
   }
 
-  const renderSlim = (card: Card) => (
-    <div key={card.sessionId} className={`dsht3-row${card.selected ? ' dsht3-on' : ''}`}>
-      <button
-        type="button"
-        className="dsht3-slim"
-        aria-current={card.selected ? true : undefined}
-        onClick={() => onOpen(card.sessionId)}
-      >
-        {card.sessionTitle}
-      </button>
-      <button
-        type="button"
-        className="dsht3-unsettle"
-        onClick={() => send({ type: 'Unsettle', sessionId: card.sessionId })}
-      >
-        {t('unsettle')}
-      </button>
-      <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
-    </div>
-  )
-
   const directoryFlow = flowOpen && directoryFlowAvailable ? renderSlot('sidebar.workspaces.directoryFlow', {
     open: flowOpen,
     busy: flowBusy,
@@ -371,9 +449,10 @@ export function Taskbar(props: Props) {
 
   const pinned = view.shelves.pinned
   const active = view.shelves.active
+  const snoozed = view.shelves.snoozed
   const settled = view.shelves.settled
   const unsentDrafts = view.unsentDrafts
-  const empty = pinned.length === 0 && active.length === 0 && settled.length === 0 && unsentDrafts.length === 0
+  const empty = pinned.length === 0 && active.length === 0 && snoozed.length === 0 && settled.length === 0 && unsentDrafts.length === 0
 
   return (
     <div className="dsht3">
@@ -408,6 +487,15 @@ export function Taskbar(props: Props) {
                 {active.map(renderCard)}
               </section>
             ) : null}
+            {/* snoozed */}
+            {snoozed.length === 0 ? null : (
+              <section className="dsht3-shelf">
+                <button type="button" className="dsht3-shead dsht3-stoggle" onClick={() => setSnoozedOpen((was) => !was)}>
+                  {snoozedOpen ? '▾' : '▸'} {t('shelf.snoozed')}
+                </button>
+                {snoozedOpen ? snoozed.map(renderSnoozed) : null}
+              </section>
+            )}
             {/* settled */}
             {settled.length === 0 ? null : (
               <section className="dsht3-shelf">
@@ -419,7 +507,7 @@ export function Taskbar(props: Props) {
                 >
                   {settledOpen ? '▾' : '▸'} {t('shelf.settled')}
                 </button>
-                {settledOpen ? settled.map(renderSlim) : null}
+                {settledOpen ? settled.map(renderSettled) : null}
               </section>
             )}
           </>
@@ -429,25 +517,58 @@ export function Taskbar(props: Props) {
         <>
           <div className="dsht3-scrim" onClick={() => setMenu(null)} />
           <div className="dsht3-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => {
-              const title = window.prompt(t('menu.rename'))
-              if (title) void renameSession(menu.id as never, title)
-              setMenu(null)
-            }}>{t('menu.rename')}</button>
-            <button type="button" onClick={() => { forkSession(menu.id as never); setMenu(null) }}>{t('menu.fork')}</button>
-            {settledIds.has(menu.id) ? null : (
+            {snoozePanel ? (
+              <>
+                <button type="button" onClick={() => { onSnooze(menu.id, Date.now() + HOUR_MS); setMenu(null) }}>{t('snooze.hour')}</button>
+                {laterToday18(now) === undefined ? null : (
+                  <button type="button" onClick={() => {
+                    const until = laterToday18(now)
+                    if (until === undefined) return
+                    onSnooze(menu.id, until)
+                    setMenu(null)
+                  }}>{t('snooze.laterToday')}</button>
+                )}
+                <button type="button" onClick={() => { onSnooze(menu.id, tomorrow09(now)); setMenu(null) }}>{t('snooze.tomorrow')}</button>
+                <div className="dsht3-custom">
+                  <input
+                    type="datetime-local"
+                    aria-label={t('snooze.custom')}
+                    value={customUntil}
+                    onChange={(event) => setCustomUntil(event.target.value)}
+                  />
+                  <button type="button" onClick={() => {
+                    const until = new Date(customUntil).getTime()
+                    if (!Number.isFinite(until) || until <= Date.now()) return
+                    onSnooze(menu.id, until)
+                    setMenu(null)
+                  }}>{t('snooze.apply')}</button>
+                </div>
+              </>
+            ) : (
               <>
                 <button type="button" onClick={() => {
-                  send(pinnedIds.has(menu.id) ? { type: 'Unpin', sessionId: menu.id } : { type: 'Pin', sessionId: menu.id })
+                  const title = window.prompt(t('menu.rename'))
+                  if (title) void renameSession(menu.id as never, title)
                   setMenu(null)
-                }}>{t(pinnedIds.has(menu.id) ? 'unpin' : 'pin')}</button>
-                <button type="button" onClick={() => {
-                  send({ type: 'Settle', sessionId: menu.id, at: Date.now() })
-                  setMenu(null)
-                }}>{t('settle')}</button>
+                }}>{t('menu.rename')}</button>
+                <button type="button" onClick={() => { forkSession(menu.id as never); setMenu(null) }}>{t('menu.fork')}</button>
+                {settledIds.has(menu.id) ? null : (
+                  <button type="button" onClick={() => { onTogglePin(menu.id, pinnedIds.has(menu.id)); setMenu(null) }}>
+                    {t(pinnedIds.has(menu.id) ? 'unpin' : 'pin')}
+                  </button>
+                )}
+                {snoozedIds.has(menu.id) || settledIds.has(menu.id) || list.byId[menu.id as never]?.pendingInteraction !== undefined ? null : (
+                  <button type="button" onClick={() => setSnoozePanel(true)}>{t('menu.snooze')}</button>
+                )}
+                {settledIds.has(menu.id) || snoozedIds.has(menu.id) ? null : (
+                  <button type="button" onClick={() => {
+                    send({ type: 'Settle', sessionId: menu.id, at: Date.now() })
+                    setMenu(null)
+                  }}>{t('settle')}</button>
+                )}
+                <button type="button" className="dsht3-danger" onClick={() => { void archiveSession(menu.id as never); setMenu(null) }}>{t('menu.archive')}</button>
               </>
             )}
-            <button type="button" className="dsht3-danger" onClick={() => { void archiveSession(menu.id as never); setMenu(null) }}>{t('menu.archive')}</button>
           </div>
         </>
       ) : null}

@@ -9,6 +9,9 @@ export const zh = {
   'workspace.add': '添加工作区',
   'empty': '没有会话',
   'session.blank': '新会话',
+  'draft.unsent': '未发送草稿',
+  'draft.discard': '丢弃',
+  'draft.pen': '有未发送草稿',
 }
 
 export const en = {
@@ -20,6 +23,9 @@ export const en = {
   'workspace.add': 'Add workspace',
   'empty': 'No sessions',
   'session.blank': 'New session',
+  'draft.unsent': 'Unsent Draft',
+  'draft.discard': 'Discard',
+  'draft.pen': 'Unsent draft',
 }
 
 export type TaskbarKey = keyof typeof zh

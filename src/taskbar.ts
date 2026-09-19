@@ -44,6 +44,10 @@ export interface ProjectInput {
   workspaceFilter?: string
   /** Host-probed git facts keyed by Session id. Copied onto Card marks; runtime is ticket 12. */
   gitMarks?: Readonly<Record<string, CardMarks>>
+  /** True when an AGY or Cursor ACP plugin is installed. Runtime marks are omitted when false or missing. */
+  acpPresent?: boolean
+  /** ModelSelection.provider strings keyed by Session id. Missing keys omit the Runtime mark. */
+  providers?: Readonly<Record<string, string>>
 }
 
 export interface WorkspaceIdentity {
@@ -291,6 +295,23 @@ function gitMarksOf(raw: CardMarks | undefined): CardMarks | undefined {
   if (raw.branch !== undefined && raw.branch !== '') marks.branch = raw.branch
   if (raw.worktree !== undefined && raw.worktree !== '') marks.worktree = raw.worktree
   if (raw.pr !== undefined && raw.pr !== '') marks.pr = raw.pr
+  if (raw.runtime !== undefined) marks.runtime = raw.runtime
+  return Object.keys(marks).length === 0 ? undefined : marks
+}
+
+function runtimeOf(input: ProjectInput, sessionId: string): CardMarks['runtime'] {
+  if (input.acpPresent !== true) return undefined
+  const provider = input.providers?.[sessionId]
+  if (provider === undefined) return undefined
+  if (provider === 'cursor-agent' || provider.startsWith('cursor-agent:')) return 'cursor'
+  if (provider === 'antigravity' || provider.startsWith('antigravity:') || provider === 'google-antigravity') return 'agy'
+  return 'dsh'
+}
+
+function cardMarksOf(git: CardMarks | undefined, runtime: CardMarks['runtime']): CardMarks | undefined {
+  const marks: CardMarks = { ...gitMarksOf(git) }
+  delete marks.runtime
+  if (runtime !== undefined) marks.runtime = runtime
   return Object.keys(marks).length === 0 ? undefined : marks
 }
 
@@ -306,7 +327,7 @@ function toCard(
   const relativeTime = liveStatus === undefined && opts?.now !== undefined
     ? relativeTimeOf(session.updatedAt, opts.now)
     : undefined
-  const marks = gitMarksOf(opts?.marks)
+  const marks = opts?.marks
   return {
     sessionId: session.id,
     workspaceTitle,
@@ -343,13 +364,13 @@ export function project(input: ProjectInput): ViewModel {
   const settled: Card[] = []
   for (const session of listed) {
     const draft = draftOf(input, session.id)
-    const git = input.gitMarks?.[session.id]
+    const marks = cardMarksOf(input.gitMarks?.[session.id], runtimeOf(input, session.id))
     if (session.blank) {
       if (draft !== '') {
         unsentDrafts.push(toCard(session, input.workspaces, input.current, {
           preview: draft,
           ...(now !== undefined ? { now } : {}),
-          ...(git !== undefined ? { marks: git } : {}),
+          ...(marks !== undefined ? { marks } : {}),
         }))
         continue
       }
@@ -369,7 +390,7 @@ export function project(input: ProjectInput): ViewModel {
         ...(onSnoozed && until !== undefined ? { wakeAt: until } : {}),
         ...(onSettled && entry?.settledAt !== undefined ? { settledAt: entry.settledAt } : {}),
         ...(now !== undefined ? { now } : {}),
-        ...(git !== undefined ? { marks: git } : {}),
+        ...(marks !== undefined ? { marks } : {}),
       },
     )
     if (onSnoozed) snoozed.push(card)

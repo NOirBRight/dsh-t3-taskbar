@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import { createElement } from 'react'
 import { Taskbar } from './Taskbar.tsx'
 import { ensureTaskbarStyles } from './css.ts'
 import { bindLedgerRpc } from './ledger.ts'
@@ -20,6 +21,22 @@ export const name = 'dsh-t3-taskbar-client'
 export const inject = ['slots', 'locale', 'sessions', 'workspaces']
 
 const DIRECTORY_FLOW = 'sidebar.workspaces.directoryFlow' as const
+
+function acpPresentOf(ctx: unknown): boolean {
+  try {
+    const registry = (ctx as { registry?: { values?: () => Iterable<{ name?: string }> } }).registry
+    const values = registry?.values
+    if (typeof values !== 'function') return false
+    for (const runtime of values.call(registry)) {
+      const name = runtime?.name
+      if (typeof name !== 'string') continue
+      if (name.includes('acp-antigravity') || name.includes('acp-cursor')) return true
+    }
+  } catch {
+    return false
+  }
+  return false
+}
 
 function withoutChildren<T extends { children?: unknown }>(options: T): Omit<T, 'children'> {
   const { children: _dropped, ...rest } = options
@@ -47,6 +64,8 @@ function wrapRegisterKeepingFirstDirectoryFlowDeclarer(slots: ClientContext['slo
 }
 
 function occupyWorkspaces(ctx: ClientContext, wrapAttached: boolean): () => void {
+  const Occupant = (props: Parameters<typeof Taskbar>[0]) =>
+    createElement(Taskbar, { ...props, acpPresent: acpPresentOf(ctx) })
   const options = {
     name: 'sidebar.workspaces' as const,
     priority: -1,
@@ -101,10 +120,10 @@ function occupyWorkspaces(ctx: ClientContext, wrapAttached: boolean): () => void
     }),
   }
   try {
-    return ctx.slots.register(options, Taskbar as never)
+    return ctx.slots.register(options, Occupant as never)
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes('already declared')) throw error
-    return ctx.slots.register(withoutChildren(options), Taskbar as never)
+    return ctx.slots.register(withoutChildren(options), Occupant as never)
   }
 }
 

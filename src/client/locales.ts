@@ -42,6 +42,9 @@ export const zh = {
   'time.months': '{n}个月',
   'time.years': '{n}年',
   'date.ymd': '{y}年{m}月{d}日',
+  'runtime.dsh': 'DSH Runtime',
+  'runtime.agy': 'AGY',
+  'runtime.cursor': 'Cursor',
 }
 
 export const en = {
@@ -86,6 +89,9 @@ export const en = {
   'time.months': '{n}mo',
   'time.years': '{n}y',
   'date.ymd': '{y}-{m}-{d}',
+  'runtime.dsh': 'DSH Runtime',
+  'runtime.agy': 'AGY',
+  'runtime.cursor': 'Cursor',
 }
 
 export type TaskbarKey = keyof typeof zh

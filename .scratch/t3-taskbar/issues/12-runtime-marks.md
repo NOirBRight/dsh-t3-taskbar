@@ -4,7 +4,7 @@
 
 **Blocked by:** 11 Host git and PR marks
 
-**Status:** claimed
+**Status:** resolved
 
 **Parent:** `.scratch/t3-taskbar/spec.md`
 

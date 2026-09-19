@@ -17,8 +17,12 @@ The DSH list row — one agent task. T3's Thread is the analogue, not a second e
 _Avoid_: Thread, Conversation (the open transcript)
 
 **Workspace**:
-A DSH directory grouping that Sessions can belong to. T3's Project is the analogue. On a Card it is the first line, never a list heading.
-_Avoid_: Project, Workspace group
+A DSH directory grouping that Sessions can belong to. T3's Project is the analogue. On a Card it is named on the first line, never a list heading.
+_Avoid_: Project, Workspace group, Repo, 目录
+
+**Workspace Identity**:
+The Card's leading mark derived from the Workspace name (two-letter monogram and hashed color). Settings may replace it later; the derivation is the default.
+_Avoid_: Favicon, project icon, Repo icon
 
 **Shelf**:
 One of Pinned, Active, Snoozed, or Settled. A Session sits in exactly one Shelf. The assignment is this plugin's overlay on the Host, not a Session field.
@@ -33,9 +37,21 @@ Composer text stored on a Session that has not been sent. On a blank Session it 
 _Avoid_: Draft shelf, blank Session (the DSH list flag)
 
 **Card**:
-A Pinned or Active row: Workspace name and live status on the first line, Session title on the second. Snoozed and Settled rows are slim.
-_Avoid_: One-line Session row, Workspace section header
+A Pinned or Active row: Workspace Identity, Workspace name, and Live status or relative time on line one; Session title on line two; optional git / PR / Runtime marks on line three. Snoozed rows are slim. Settled rows are slim: Identity, title, PR, and date.
+_Avoid_: One-line Session row, Workspace section header, Repo
+
+**Runtime**:
+Which agent backend is driving the Session: DSH Runtime, AGY, or Cursor. The Card draws this mark only when an AGY or Cursor ACP plugin is installed, and then on every row (native Sessions show DSH Runtime). Codex and Grok are DSH Runtime. Unknown backend collapses the mark. It is not the DSH product chrome, not Provider Usage, and not a settings Role badge.
+_Avoid_: Provider (the settings card), Role, Product Worker, using bare “DSH” for this mark
+
+**DSH Runtime**:
+The official harness running the Session. On the Card it is one of three Runtimes, shown so AGY and Cursor rows are not mistaken for the product itself.
+_Avoid_: DSH (the product), Provider Usage
+
+**AGY**:
+Antigravity ACP as a Runtime. The Card uses this short name.
+_Avoid_: Antigravity (on the Card), Google, Gemini
 
 **Rail**:
-The official 56px collapsed sidebar. This plugin does not draw Cards there. The occupant's rail chrome matches the official WorkspaceBrowser: search and add-workspace icons that expand the sidebar. The Taskbar is the wide column only.
-_Avoid_: Mini Cards, handing the seat back to a second occupant (the slot is single)
+The official 56px collapsed sidebar. This plugin does not draw Cards there. Icons stack vertically: search, plugin, add-workspace, and new session — the wide header minus Workspace filter. Search, plugin, and add-workspace expand the sidebar first; new session may start immediately. The APK overlay drawer uses the wide Taskbar, not a second occupant.
+_Avoid_: Mini Cards, handing the seat back to a second occupant (the slot is single), Workspace filter on the Rail

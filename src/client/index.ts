@@ -20,11 +20,10 @@ export const name = 'dsh-t3-taskbar-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection', 'layout']
 
 export function apply(ctx: ClientContext): void {
-  ctx.locale.register(NS, { zh, en })
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-t3-taskbar: dictionaries')
   ensureTaskbarStyles()
   const connection = ctx.get('connection')
   bindLedgerRpc(connection.rpc)
-  const hostDescription = connection.hostDescription
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
     name: 'sidebar.workspaces',
     priority: -1,
@@ -70,7 +69,6 @@ export function apply(ctx: ClientContext): void {
           getSnapshot: () => ctx.slots.entries('sidebar.workspaces.directoryFlow').length > 0,
           subscribe: (listener: () => void) => ctx.slots.subscribe('sidebar.workspaces.directoryFlow', listener),
         },
-        hostDescription,
       },
     }),
   }, Taskbar as never))

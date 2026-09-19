@@ -451,19 +451,21 @@ export function Taskbar(props: Props) {
     )
   }
 
-  const directoryFlow = flowOpen && directoryFlowAvailable ? renderSlot('sidebar.workspaces.directoryFlow', {
-    open: flowOpen,
-    busy: flowBusy,
-    onPicked: (path: string) => {
-      setFlowBusy(true)
-      void createWorkspace({ path }).finally(() => {
-        setFlowBusy(false)
-        setFlowOpen(false)
-      })
-    },
-    onCancel: () => setFlowOpen(false),
-    onError: () => setFlowOpen(false),
-  }) : null
+  const directoryFlow = flowOpen && directoryFlowAvailable && renderSlot !== undefined
+    ? renderSlot('sidebar.workspaces.directoryFlow', {
+      open: flowOpen,
+      busy: flowBusy,
+      onPicked: (path: string) => {
+        setFlowBusy(true)
+        void createWorkspace({ path }).finally(() => {
+          setFlowBusy(false)
+          setFlowOpen(false)
+        })
+      },
+      onCancel: () => setFlowOpen(false),
+      onError: () => setFlowOpen(false),
+    })
+    : null
 
   if (!wide) {
     return (

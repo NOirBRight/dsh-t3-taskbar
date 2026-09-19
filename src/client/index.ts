@@ -1,9 +1,9 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { defineStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { Taskbar } from './Taskbar.tsx'
 import { ensureTaskbarStyles } from './css.ts'
@@ -19,13 +19,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const name = 'dsh-t3-taskbar-client'
 export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection', 'layout']
 
-function createTaskbarStore() {
-  return defineStore({
-    init: () => ({}),
-    actions: {},
-  })
-}
-
 export function apply(ctx: ClientContext): void {
   ctx.locale.register(NS, { zh, en })
   ensureTaskbarStyles()
@@ -35,7 +28,6 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
     name: 'sidebar.workspaces',
     priority: -1,
-    store: createTaskbarStore(),
     locale: NS,
     inject: () => ({
       startSession: (workspaceId?: string) => ctx.workspaces.startSession(workspaceId as never),

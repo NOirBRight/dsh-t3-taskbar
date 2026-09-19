@@ -40,6 +40,8 @@ export function ensureTaskbarStyles(): void {
 .dsht3-ident[data-color="lime"], .dsht3-ident[data-color="green"], .dsht3-ident[data-color="emerald"], .dsht3-ident[data-color="teal"] { color:var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)); }
 .dsht3-more { flex:none; width:28px; margin:6px 4px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; }
 .dsht3-more:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-act, .dsht3-unsettle, .dsht3-more { display:none; }
+.dsht3-row.dsht3-on .dsht3-act, .dsht3-row.dsht3-on .dsht3-unsettle, .dsht3-row.dsht3-on .dsht3-more { display:unset; }
 .dsht3-empty { padding:24px 12px; color:var(--dsw-alias-label-tertiary); }
 .dsht3-draft { display:flex; align-items:center; gap:2px; }
 .dsht3-discard { cursor:pointer; flex:none; border:0; background:transparent; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); padding:4px 8px; border-radius:6px; }
@@ -59,8 +61,7 @@ export function ensureTaskbarStyles(): void {
 .dsht3-verb { flex:none; align-self:center; padding:0 8px; color:var(--dsw-alias-label-secondary); font:var(--dsw-font-xxs-12); }
 .dsht3-dropzone { min-height:10px; }
 @media (hover:hover) and (pointer:fine) {
-  .dsht3-more { opacity:0; }
-  .dsht3-row:hover .dsht3-more, .dsht3-row.dsht3-on .dsht3-more { opacity:1; }
+  .dsht3-row:hover .dsht3-act, .dsht3-row:hover .dsht3-unsettle, .dsht3-row:hover .dsht3-more { display:unset; }
 }
 `
   document.head.append(style)

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { project, type Card, type Command, type LiveStatus, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
-import { discardDraft, draftsSnapshot, subscribeDrafts } from './drafts.ts'
+import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
 import { AddWorkspaceIcon, PenIcon, SearchIcon } from './icons.tsx'
 import { applyLedger, loadLedger } from './ledger.ts'
 import { EMPTY_LEDGER } from '../ledger-json.ts'
@@ -71,8 +71,13 @@ export function Taskbar(props: Props) {
   const list = useSessions((state) => state)
   const workspaces = useWorkspaces((state) => state)
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
-  const [ledger, setLedger] = useState(EMPTY_LEDGER)
-  const drafts = useSyncExternalStore(subscribeDrafts, () => draftsSnapshot(list.ids))
+  const [ledger, setLedger] = useState(() => ({ revision: 0, records: {} as typeof EMPTY_LEDGER.records }))
+  const sessionIds = list.ids
+  const drafts = useSyncExternalStore(
+    subscribeDrafts,
+    () => draftsSnapshot(sessionIds),
+    () => EMPTY_DRAFTS,
+  )
   const [query, setQuery] = useState('')
   const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
@@ -91,8 +96,10 @@ export function Taskbar(props: Props) {
     return () => window.clearInterval(timer)
   }, [])
 
-  const livingIds = list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id))
-  const livingIdsKey = livingIds.join('\0')
+  const livingIdsKey = useMemo(
+    () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
+    [list.ids, workspaces.archivedSessionIds],
+  )
 
   useEffect(() => {
     if (list.phase !== 'ready') return
@@ -102,7 +109,8 @@ export function Taskbar(props: Props) {
       if (cancelled) return
       const next = await applyLedger({ type: 'Gc', livingIds: ids }, loaded.revision)
       if (cancelled) return
-      setLedger(next ?? loaded)
+      const chosen = next ?? loaded
+      setLedger((was) => was.revision === chosen.revision ? was : chosen)
     })
     return () => { cancelled = true }
   }, [livingIdsKey, list.phase])
@@ -144,29 +152,31 @@ export function Taskbar(props: Props) {
     if (settledIds.has(sessionId)) return 'settled'
     return 'active'
   }
+  const searchSessionsRef = useRef(searchSessions)
+  searchSessionsRef.current = searchSessions
   const searching = query.trim() !== ''
 
   useEffect(() => {
     if (!searching) {
-      setHostHits([])
+      setHostHits((hits) => (hits.length === 0 ? hits : []))
       return
     }
     const needle = query.trim()
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      searchSessions(needle, controller.signal).then((result) => {
+      searchSessionsRef.current(needle, controller.signal).then((result) => {
         if (controller.signal.aborted) return
         setHostHits(result.items.map((item) => ({ sessionId: item.sessionId, snippet: item.snippet })))
       }).catch(() => {
         if (controller.signal.aborted) return
-        setHostHits([])
+        setHostHits((hits) => (hits.length === 0 ? hits : []))
       })
     }, SEARCH_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [query, searchSessions, searching])
+  }, [query, searching])
 
   useEffect(() => {
     const close = () => setMenu(null)

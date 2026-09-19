@@ -59,8 +59,10 @@ export function readDraft(sessionId: string): string {
   }
 }
 
+export const EMPTY_DRAFTS: Readonly<Record<string, string>> = {}
+
 let cachedJson = ''
-let cached: Readonly<Record<string, string>> = {}
+let cached: Readonly<Record<string, string>> = EMPTY_DRAFTS
 
 export function draftsSnapshot(sessionIds: readonly string[]): Readonly<Record<string, string>> {
   const next: Record<string, string> = {}

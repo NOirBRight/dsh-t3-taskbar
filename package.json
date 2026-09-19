@@ -25,7 +25,8 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && tsdown"
+    "build": "tsc -p tsconfig.json && tsdown",
+    "prototype": "python3 -m http.server 4173 --directory .scratch/t3-taskbar --bind 127.0.0.1"
   },
   "dsh": {
     "bundle": {

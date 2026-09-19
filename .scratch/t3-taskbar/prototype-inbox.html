@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE · Taskbar inbox variants</title>
+<!--
+  Question: what should the Taskbar Card look like vs T3, inside real DSH chrome?
+  Three variants via ?variant= A|B|C  (also ← → and the bar at the bottom).
+  Throwaway. Not the plugin. Official tokens approximated for dark lab.
+-->
+<style>
+  :root {
+    --bg: #111111;
+    --sidebar: #171717;
+    --main: #1c1c1c;
+    --label: #f2f2f2;
+    --secondary: #b8b8b8;
+    --tertiary: #8a8a8a;
+    --hover: #2a2a2a;
+    --active: #323232;
+    --module: #242424;
+    --border: #2e2e2e;
+    --warn: #e6a23c;
+    --accent: #5b8cff;
+    --running: #3dd6c6;
+    --ok: #6ee7b7;
+    --font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+    --font-s: 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--label); font: var(--font); }
+  .app { display: grid; grid-template-rows: 40px 1fr; height: 100%; }
+  .top { display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--secondary); font: var(--font-s); }
+  .top b { color: var(--label); font-weight: 600; }
+  .body { display: grid; grid-template-columns: 268px 1fr; min-height: 0; }
+  .col { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; font-weight: 650; letter-spacing: .02em; }
+  .mark { width: 22px; height: 22px; border-radius: 6px; background: #4b6bfb; }
+  .ghost { margin: 0 10px 8px; height: 34px; border: 0; border-radius: 8px; background: var(--module); color: var(--label); cursor: pointer; }
+  .link { margin: 0 10px 8px; height: 28px; border: 0; background: transparent; color: var(--secondary); text-align: left; cursor: pointer; }
+  .fill { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .usage { padding: 8px 10px 6px; border-top: 1px solid var(--border); }
+  .usage h4 { margin: 0 0 8px; color: var(--tertiary); font: var(--font-s); font-weight: 500; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tile { padding: 8px; border-radius: 8px; background: var(--module); color: var(--secondary); font: var(--font-s); }
+  .settings { padding: 8px 12px 12px; color: var(--secondary); font: var(--font-s); }
+  .pane { background: var(--main); padding: 18px 22px; color: var(--tertiary); }
+  .pane h2 { margin: 0 0 8px; color: var(--label); font-size: 16px; font-weight: 600; }
+  .bubble { margin-left: auto; max-width: 52%; padding: 8px 12px; border-radius: 12px; background: var(--module); color: var(--label); }
+
+  /* A: current */
+  .a-head { padding: 4px 8px 8px; }
+  .a-search { height: 34px; display: flex; align-items: center; padding: 0 10px; border-radius: 8px; background: var(--module); color: var(--tertiary); }
+  .a-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--label); font: inherit; }
+  .a-add { width: 100%; height: 32px; margin-top: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary); cursor: pointer; }
+  .a-list { flex: 1; overflow: auto; padding: 4px 6px 12px; }
+  .shead { min-height: 28px; display: flex; align-items: center; padding: 4px 8px; color: var(--tertiary); font: var(--font-s); font-weight: 500; }
+  .a-row { display: flex; align-items: stretch; border-radius: 8px; }
+  .a-row:hover { background: var(--hover); }
+  .a-row.on { background: var(--active); }
+  .a-card { flex: 1; min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 8px; cursor: pointer; }
+  .line1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tertiary); font: var(--font-s); }
+  .line2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .verb { flex: none; border: 0; background: transparent; color: var(--tertiary); cursor: pointer; font: var(--font-s); padding: 4px 6px; margin: 6px 0; }
+  .more { flex: none; width: 28px; margin: 6px 4px; border: 0; background: transparent; color: var(--tertiary); cursor: pointer; }
+
+  /* B: hover verbs + accent + live rail, workspace still line 1 */
+  .b-head { padding: 8px 10px 6px; }
+  .b-search { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 8px; background: transparent; border: 1px solid var(--border); color: var(--tertiary); }
+  .b-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--label); font: inherit; }
+  .b-list { flex: 1; overflow: auto; padding: 2px 6px 12px; }
+  .b-row { position: relative; display: flex; align-items: stretch; border-radius: 8px; cursor: pointer; }
+  .b-row:hover { background: var(--hover); }
+  .b-row.on { background: var(--active); }
+  .b-row.on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--accent); }
+  .b-row[data-live="running"]::before { background: var(--running); }
+  .b-row[data-live="waiting-for-me"]::before { background: var(--warn); }
+  .b-row[data-live="done-unread"]::before { background: var(--ok); }
+  .b-card { flex: 1; min-width: 0; min-height: 48px; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 8px 10px 8px 12px; }
+  .b-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .b-row.on .b-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .b-meta { display: flex; align-items: center; gap: 6px; color: var(--tertiary); font: var(--font-s); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.running { background: var(--running); box-shadow: 0 0 0 3px #3dd6c622; }
+  .dot.wait { background: var(--warn); }
+  .dot.unread { background: var(--ok); }
+  .b-acts { display: none; align-items: center; padding-right: 4px; }
+  .b-row:hover .b-acts, .b-row.on .b-acts { display: flex; }
+  .iconbtn { width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary); cursor: pointer; }
+  .iconbtn:hover { background: var(--hover); color: var(--label); }
+  .slim { min-height: 32px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; color: var(--secondary); font: var(--font-s); cursor: pointer; border-radius: 8px; }
+  .slim:hover { background: var(--hover); }
+  .stoggle { width: 100%; border: 0; background: transparent; color: var(--tertiary); font: var(--font-s); text-align: left; padding: 4px 8px; cursor: pointer; }
+
+  /* C: title-first, workspace only if mixed, compact chrome */
+  .c-head { display: flex; gap: 6px; padding: 8px 10px 6px; }
+  .c-search { flex: 1; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px; background: var(--module); color: var(--tertiary); }
+  .c-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--label); font: inherit; }
+  .c-add { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary); cursor: pointer; }
+  .c-add:hover { background: var(--hover); color: var(--label); }
+  .c-list { flex: 1; overflow: auto; padding: 2px 4px 12px; }
+  .c-row { position: relative; display: grid; grid-template-columns: 14px 1fr auto; align-items: center; min-height: 52px; padding: 8px 8px 8px 4px; border-radius: 10px; cursor: pointer; }
+  .c-row:hover { background: var(--hover); }
+  .c-row.on { background: #243044; }
+  .rail { width: 3px; height: 28px; border-radius: 2px; background: transparent; justify-self: center; }
+  .c-row.on .rail { background: var(--accent); }
+  .c-row[data-live="running"] .rail { background: var(--running); }
+  .c-row[data-live="waiting-for-me"] .rail { background: var(--warn); }
+  .c-copy { min-width: 0; }
+  .c-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-row.on .c-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .c-sub { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tertiary); font: var(--font-s); }
+  .spin { width: 12px; height: 12px; border: 1.5px solid var(--running); border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite; vertical-align: -1px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .c-acts { display: none; }
+  .c-row:hover .c-acts, .c-row.on .c-acts { display: flex; }
+
+  .dump { position: fixed; right: 12px; bottom: 64px; width: 280px; max-height: 28vh; overflow: auto; margin: 0; padding: 8px 10px; border-radius: 8px; background: #000c; color: #9f9; font: 11px/1.35 ui-monospace, monospace; z-index: 5; }
+  .bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 999px; background: #f4f4f4; color: #111; box-shadow: 0 8px 24px #0008; font: 12px/1 ui-sans-serif, system-ui; }
+  .bar button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: #111; color: #fff; cursor: pointer; }
+  .bar span { min-width: 210px; text-align: center; font-weight: 600; }
+  .note { padding: 0 12px 8px; color: var(--tertiary); font: var(--font-s); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top"><b>deepseek</b> HARNESS · PROTOTYPE 不是插件 · 用底部条或 ← → 换变体</div>
+  <div class="body">
+    <aside class="col">
+      <div class="brand"><span class="mark"></span> deepseek HARNESS</div>
+      <button class="ghost" type="button">＋ 新会话</button>
+      <button class="link" type="button">插件</button>
+      <div class="fill" id="inbox"></div>
+      <div class="usage">
+        <h4>Provider Usage</h4>
+        <div class="tiles">
+          <div class="tile">Cursor<br>未登录</div>
+          <div class="tile">Grok<br>未登录</div>
+          <div class="tile">Codex<br>未登录</div>
+          <div class="tile">Ollama Cloud<br>加载中…</div>
+        </div>
+      </div>
+      <div class="settings">设置</div>
+    </aside>
+    <main class="pane">
+      <h2 id="pane-title">选一行看对话区密度</h2>
+      <p>外壳（新会话 / 插件 / Provider Usage）是故意留着的：Taskbar 只占中间那截座位。</p>
+      <div class="bubble" id="pane-bubble">当前变体说明写在侧栏顶上。</div>
+    </main>
+  </div>
+</div>
+<pre class="dump" id="dump"></pre>
+<div class="bar">
+  <button type="button" id="prev" aria-label="上一个变体">←</button>
+  <span id="label"></span>
+  <button type="button" id="next" aria-label="下一个变体">→</button>
+</div>
+<script>
+const VARIANTS = [
+  { key: 'A', name: '现在（对照）' },
+  { key: 'B', name: '收动作 + 色条' },
+  { key: 'C', name: '标题优先' },
+]
+
+const SESSIONS = [
+  { id: 's1', title: 'Read the large webpack config and cut the unused loaders', workspace: 'Workstation', live: null, ago: '2d', shelf: 'active' },
+  { id: 's2', title: 'No prompt content — empty composer still current', workspace: 'Workstation', live: null, ago: '2h', shelf: 'active', selected: true },
+  { id: 's3', title: 'Reply with exactly: STANDARD-MOUNT-OK', workspace: 'Workstation', live: 'done-unread', ago: '16s', shelf: 'active' },
+  { id: 's4', title: '给我一个最简单的计划，我测一下 inbox', workspace: 'Workstation', live: null, ago: '1h', shelf: 'active' },
+  { id: 's5', title: '/ask-matt用一句话说明 idea 到 ship', workspace: 'dsh-t3-taskbar', live: 'running', ago: '7m', shelf: 'active' },
+  { id: 's6', title: '你用plan模式给我一个计划我来验收', workspace: 'Workstation', live: 'waiting-for-me', ago: '20m', shelf: 'active' },
+  { id: 's7', title: 'test', workspace: 'Workstation', live: null, ago: 'now', shelf: 'active', draft: true },
+  { id: 's8', title: '本周首篇文章选题', workspace: 'blog', live: null, ago: 'now', shelf: 'settled' },
+  { id: 's9', title: '从零学习大模型训练线', workspace: 'ml', live: null, ago: '1h', shelf: 'settled' },
+]
+
+const NOTES = {
+  A: '对照：Workspace 第一行，置顶/了结常驻。标题被挤掉。',
+  B: '第 1 批：动作 hover 才出；选中/Live 用左侧色条；Workspace 仍在第一行。',
+  C: '第 3 批折中：标题第一行；第二行是 Workspace · 时间；列表里只有一个 Workspace 时第二行只留时间。',
+}
+
+const state = { variant: 'A', selected: 's2', settledOpen: false, hover: null }
+
+function current() {
+  const v = new URLSearchParams(location.search).get('variant') || 'A'
+  return VARIANTS.some((x) => x.key === v) ? v : 'A'
+}
+
+function setVariant(key) {
+  const url = new URL(location.href)
+  url.searchParams.set('variant', key)
+  history.replaceState(null, '', url)
+  state.variant = key
+  render()
+}
+
+function liveLabel(live) {
+  return ({ 'waiting-for-me': '等待我', running: '运行中', 'done-unread': '完成未看' })[live] || ''
+}
+
+function mixedWorkspaces(rows) {
+  return new Set(rows.map((r) => r.workspace)).size > 1
+}
+
+function rowA(s) {
+  const on = s.id === state.selected ? ' on' : ''
+  const line1 = s.live ? `${s.workspace} · ${liveLabel(s.live)}` : s.workspace
+  return `<div class="a-row${on}" data-id="${s.id}">
+    <div class="a-card">
+      <div class="line1">${line1}</div>
+      <div class="line2">${s.draft ? '✎ ' : ''}${s.title}</div>
+    </div>
+    <button class="verb" type="button">置顶</button>
+    <button class="verb" type="button">了结</button>
+    <button class="more" type="button">···</button>
+  </div>`
+}
+
+function rowB(s) {
+  const on = s.id === state.selected ? ' on' : ''
+  const live = s.live ? ` data-live="${s.live}"` : ''
+  const dot = s.live === 'running' ? '<span class="dot running"></span>'
+    : s.live === 'waiting-for-me' ? '<span class="dot wait"></span>'
+    : s.live === 'done-unread' ? '<span class="dot unread"></span>' : ''
+  return `<div class="b-row${on}"${live} data-id="${s.id}">
+    <div class="b-card">
+      <div class="b-meta">${dot}<span>${s.workspace}${s.live ? ' · ' + liveLabel(s.live) : ''}</span></div>
+      <div class="b-title">${s.draft ? '✎ ' : ''}${s.title}</div>
+    </div>
+    <div class="b-acts">
+      <button class="iconbtn" type="button" title="置顶">📌</button>
+      <button class="iconbtn" type="button" title="了结">✓</button>
+      <button class="iconbtn" type="button">···</button>
+    </div>
+  </div>`
+}
+
+function rowC(s, mixed) {
+  const on = s.id === state.selected ? ' on' : ''
+  const live = s.live ? ` data-live="${s.live}"` : ''
+  const spin = s.live === 'running' ? '<span class="spin"></span>' : ''
+  const sub = mixed ? `${s.workspace} · ${s.ago}` : s.ago
+  return `<div class="c-row${on}"${live} data-id="${s.id}">
+    <span class="rail"></span>
+    <div class="c-copy">
+      <div class="c-title">${spin}${s.draft ? '✎ ' : ''}${s.title}</div>
+      <div class="c-sub">${sub}${s.live && s.live !== 'running' ? ' · ' + liveLabel(s.live) : ''}</div>
+    </div>
+    <div class="c-acts">
+      <button class="iconbtn" type="button" title="置顶">📌</button>
+      <button class="iconbtn" type="button" title="了结">✓</button>
+    </div>
+  </div>`
+}
+
+function renderInbox() {
+  const v = state.variant
+  const active = SESSIONS.filter((s) => s.shelf === 'active')
+  const settled = SESSIONS.filter((s) => s.shelf === 'settled')
+  const mixed = mixedWorkspaces(SESSIONS)
+  if (v === 'A') {
+    return `<div class="note">${NOTES.A}</div>
+      <div class="a-head"><label class="a-search"><input placeholder="搜索会话" /></label>
+      <button class="a-add" type="button">添加工作区</button></div>
+      <div class="a-list"><div class="shead">活跃</div>${active.map(rowA).join('')}
+      <button class="stoggle" type="button" data-toggle="settled">已了结 ▸</button>
+      ${state.settledOpen ? settled.map((s) => `<div class="slim" data-id="${s.id}">${s.title}</div>`).join('') : ''}
+      </div>`
+  }
+  if (v === 'B') {
+    return `<div class="note">${NOTES.B}</div>
+      <div class="b-head"><label class="b-search">⌕ <input placeholder="搜索会话" /></label></div>
+      <div class="b-list"><div class="shead">活跃</div>${active.map(rowB).join('')}
+      <button class="stoggle" type="button" data-toggle="settled">已了结 ${state.settledOpen ? '▾' : '▸'} ${settled.length}</button>
+      ${state.settledOpen ? settled.map((s) => `<div class="slim" data-id="${s.id}"><span>${s.title}</span><span>${s.ago}</span></div>`).join('') : ''}
+      </div>`
+  }
+  return `<div class="note">${NOTES.C}</div>
+    <div class="c-head"><label class="c-search">⌕ <input placeholder="搜索" /></label>
+    <button class="c-add" type="button" title="添加工作区">＋</button></div>
+    <div class="c-list"><div class="shead">活跃</div>${active.map((s) => rowC(s, mixed)).join('')}
+    <button class="stoggle" type="button" data-toggle="settled">Settled ${state.settledOpen ? '▾' : '▸'}</button>
+    ${state.settledOpen ? settled.map((s) => `<div class="slim" data-id="${s.id}"><span>${s.title}</span><span>${s.ago}</span></div>`).join('') : ''}
+    </div>`
+}
+
+function render() {
+  state.variant = current()
+  const meta = VARIANTS.find((x) => x.key === state.variant)
+  document.getElementById('label').textContent = `${meta.key} · ${meta.name}`
+  document.getElementById('inbox').innerHTML = renderInbox()
+  const sel = SESSIONS.find((s) => s.id === state.selected)
+  document.getElementById('pane-title').textContent = sel ? sel.title : ''
+  document.getElementById('pane-bubble').textContent = NOTES[state.variant]
+  document.getElementById('dump').textContent = JSON.stringify({
+    variant: state.variant,
+    selected: state.selected,
+    settledOpen: state.settledOpen,
+    mixedWorkspaces: mixedWorkspaces(SESSIONS),
+    question: 'Card hierarchy inside DSH chrome',
+  }, null, 2)
+}
+
+document.getElementById('inbox').addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-toggle="settled"]')
+  if (toggle) { state.settledOpen = !state.settledOpen; render(); return }
+  const row = event.target.closest('[data-id]')
+  if (!row) return
+  if (event.target.closest('button')) return
+  state.selected = row.getAttribute('data-id')
+  render()
+})
+
+document.getElementById('prev').onclick = () => {
+  const i = VARIANTS.findIndex((x) => x.key === current())
+  setVariant(VARIANTS[(i + VARIANTS.length - 1) % VARIANTS.length].key)
+}
+document.getElementById('next').onclick = () => {
+  const i = VARIANTS.findIndex((x) => x.key === current())
+  setVariant(VARIANTS[(i + 1) % VARIANTS.length].key)
+}
+window.addEventListener('keydown', (event) => {
+  const tag = event.target.closest('input, textarea, [contenteditable]')
+  if (tag) return
+  if (event.key === 'ArrowLeft') document.getElementById('prev').click()
+  if (event.key === 'ArrowRight') document.getElementById('next').click()
+})
+
+render()
+</script>
+</body>
+</html>

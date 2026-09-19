@@ -16,8 +16,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export const name = 'dsh-t3-taskbar-client'
-/** Apply before ui-workspace so this occupant declares directoryFlow (ADR 0002). */
-export const inject = ['slots', 'locale']
+/** Wait for sessions/workspaces so occupant inject may read them; omit remote.directoryPicker so this still applies before ui-workspace (ADR 0002). */
+export const inject = ['slots', 'locale', 'sessions', 'workspaces']
 
 const DIRECTORY_FLOW = 'sidebar.workspaces.directoryFlow' as const
 

@@ -35,15 +35,38 @@ export interface ProjectInput {
   now?: number
 }
 
+export interface WorkspaceIdentity {
+  monogram: string
+  color: string
+}
+
+export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
+
+export interface RelativeTime {
+  unit: RelativeTimeUnit
+  n: number
+}
+
+export interface CardMarks {
+  branch?: string
+  worktree?: string
+  pr?: string
+  runtime?: 'dsh' | 'agy' | 'cursor'
+}
+
 export interface Card {
   sessionId: string
   workspaceTitle: string
   sessionTitle: string
+  identity: WorkspaceIdentity
   liveStatus?: LiveStatus
+  relativeTime?: RelativeTime
+  marks?: CardMarks
   selected: boolean
   unsentDraft?: true
   slim?: true
   wakeAt?: number
+  settledAt?: number
 }
 
 export interface ViewModel {
@@ -212,28 +235,76 @@ function liveStatusOf(session: Session): LiveStatus | undefined {
   return undefined
 }
 
+const IDENTITY_COLORS = [
+  'gray', 'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald',
+  'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia',
+  'pink', 'rose',
+] as const
+
+function identityOf(title: string): WorkspaceIdentity {
+  const normalized = title.normalize('NFKC').trim()
+  const words = normalized.match(/[\p{L}\p{N}]+/gu) ?? []
+  const firstWord = words[0]
+  let monogram = 'PR'
+  if (firstWord !== undefined) {
+    const glyphs = Array.from(firstWord)
+    const first = glyphs[0] ?? 'P'
+    const second =
+      glyphs.slice(1).find((glyph) => /\p{N}/u.test(glyph))
+      ?? (words.length > 1 ? Array.from(words.at(-1) ?? '')[0] : glyphs.at(-1))
+      ?? first
+    monogram = Array.from(`${first}${second}`.toUpperCase()).slice(0, 2).join('')
+  }
+  const seed = normalized.toLocaleLowerCase('en-US') || 'project'
+  let index = 0
+  for (const glyph of seed) {
+    index = (index * 31 + (glyph.codePointAt(0) ?? 0)) % IDENTITY_COLORS.length
+  }
+  return { monogram, color: IDENTITY_COLORS[index] ?? 'blue' }
+}
+
 function draftOf(input: ProjectInput, sessionId: string): string {
   const text = input.drafts?.[sessionId]
   return text !== undefined && text !== '' ? text : ''
+}
+
+function relativeTimeOf(updatedAt: number, now: number): RelativeTime {
+  const min = 60_000
+  const hour = 3_600_000
+  const day = 86_400_000
+  const diff = Math.max(0, now - updatedAt)
+  if (diff < min) return { unit: 'now', n: 0 }
+  if (diff < hour) return { unit: 'minutes', n: Math.floor(diff / min) }
+  if (diff < day) return { unit: 'hours', n: Math.floor(diff / hour) }
+  if (diff < 30 * day) return { unit: 'days', n: Math.floor(diff / day) }
+  if (diff < 365 * day) return { unit: 'months', n: Math.floor(diff / (30 * day)) }
+  return { unit: 'years', n: Math.floor(diff / (365 * day)) }
 }
 
 function toCard(
   session: Session,
   workspaces: readonly Workspace[],
   current: string | undefined,
-  opts?: { preview?: string, unsentDraft?: true, slim?: true, wakeAt?: number },
+  opts?: { preview?: string, unsentDraft?: true, slim?: true, wakeAt?: number, settledAt?: number, now?: number },
 ): Card {
   const workspace = workspaceOf(session, workspaces)
+  const workspaceTitle = workspace?.title ?? ''
   const liveStatus = liveStatusOf(session)
+  const relativeTime = liveStatus === undefined && opts?.now !== undefined
+    ? relativeTimeOf(session.updatedAt, opts.now)
+    : undefined
   return {
     sessionId: session.id,
-    workspaceTitle: workspace?.title ?? '',
+    workspaceTitle,
     sessionTitle: opts?.preview ?? session.title,
+    identity: identityOf(workspaceTitle),
     ...(liveStatus !== undefined ? { liveStatus } : {}),
+    ...(relativeTime !== undefined ? { relativeTime } : {}),
     selected: session.id === current,
     ...(opts?.unsentDraft === true ? { unsentDraft: true } : {}),
     ...(opts?.slim === true ? { slim: true } : {}),
     ...(opts?.wakeAt !== undefined ? { wakeAt: opts.wakeAt } : {}),
+    ...(opts?.settledAt !== undefined ? { settledAt: opts.settledAt } : {}),
   }
 }
 
@@ -256,7 +327,10 @@ export function project(input: ProjectInput): ViewModel {
     const draft = draftOf(input, session.id)
     if (session.blank) {
       if (draft !== '') {
-        unsentDrafts.push(toCard(session, input.workspaces, input.current, { preview: draft }))
+        unsentDrafts.push(toCard(session, input.workspaces, input.current, {
+          preview: draft,
+          ...(now !== undefined ? { now } : {}),
+        }))
         continue
       }
       if (session.id !== input.current) continue
@@ -273,6 +347,8 @@ export function project(input: ProjectInput): ViewModel {
         ...(draft !== '' ? { unsentDraft: true as const } : {}),
         ...(onSnoozed || onSettled ? { slim: true as const } : {}),
         ...(onSnoozed && until !== undefined ? { wakeAt: until } : {}),
+        ...(onSettled && entry?.settledAt !== undefined ? { settledAt: entry.settledAt } : {}),
+        ...(now !== undefined ? { now } : {}),
       },
     )
     if (onSnoozed) snoozed.push(card)

@@ -18,6 +18,7 @@ describe('project with ledger', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
       },
     ])

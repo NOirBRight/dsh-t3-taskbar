@@ -21,6 +21,7 @@ describe('project Unsent Draft', () => {
         sessionId: 'drafty',
         workspaceTitle: 'alpha',
         sessionTitle: 'please fix the login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
       },
     ])
@@ -74,6 +75,7 @@ describe('project Unsent Draft', () => {
         sessionId: 'blank',
         workspaceTitle: 'alpha',
         sessionTitle: 'hello from the composer',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: true,
       },
     ])
@@ -96,6 +98,7 @@ describe('project Unsent Draft', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
         unsentDraft: true,
       },

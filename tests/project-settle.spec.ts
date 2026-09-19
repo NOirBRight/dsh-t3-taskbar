@@ -18,8 +18,10 @@ describe('project Settle', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
         slim: true,
+        settledAt: 50,
       },
     ])
     expect(view.shelves.active).toEqual([])

@@ -25,6 +25,13 @@ export interface Workspace {
   sessionIds: readonly string[]
 }
 
+export interface CardMarks {
+  branch?: string
+  worktree?: string
+  pr?: string
+  runtime?: 'dsh' | 'agy' | 'cursor'
+}
+
 export interface ProjectInput {
   sessions: readonly Session[]
   workspaces: readonly Workspace[]
@@ -35,6 +42,8 @@ export interface ProjectInput {
   now?: number
   /** Browser-local Workspace id. When set, Sessions outside that Workspace are omitted. Not a ledger field. */
   workspaceFilter?: string
+  /** Host-probed git facts keyed by Session id. Copied onto Card marks; runtime is ticket 12. */
+  gitMarks?: Readonly<Record<string, CardMarks>>
 }
 
 export interface WorkspaceIdentity {
@@ -47,13 +56,6 @@ export type RelativeTimeUnit = 'now' | 'minutes' | 'hours' | 'days' | 'months' |
 export interface RelativeTime {
   unit: RelativeTimeUnit
   n: number
-}
-
-export interface CardMarks {
-  branch?: string
-  worktree?: string
-  pr?: string
-  runtime?: 'dsh' | 'agy' | 'cursor'
 }
 
 export interface Card {
@@ -283,11 +285,20 @@ function relativeTimeOf(updatedAt: number, now: number): RelativeTime {
   return { unit: 'years', n: Math.floor(diff / (365 * day)) }
 }
 
+function gitMarksOf(raw: CardMarks | undefined): CardMarks | undefined {
+  if (raw === undefined) return undefined
+  const marks: CardMarks = {}
+  if (raw.branch !== undefined && raw.branch !== '') marks.branch = raw.branch
+  if (raw.worktree !== undefined && raw.worktree !== '') marks.worktree = raw.worktree
+  if (raw.pr !== undefined && raw.pr !== '') marks.pr = raw.pr
+  return Object.keys(marks).length === 0 ? undefined : marks
+}
+
 function toCard(
   session: Session,
   workspaces: readonly Workspace[],
   current: string | undefined,
-  opts?: { preview?: string, unsentDraft?: true, slim?: true, wakeAt?: number, settledAt?: number, now?: number },
+  opts?: { preview?: string, unsentDraft?: true, slim?: true, wakeAt?: number, settledAt?: number, now?: number, marks?: CardMarks },
 ): Card {
   const workspace = workspaceOf(session, workspaces)
   const workspaceTitle = workspace?.title ?? ''
@@ -295,6 +306,7 @@ function toCard(
   const relativeTime = liveStatus === undefined && opts?.now !== undefined
     ? relativeTimeOf(session.updatedAt, opts.now)
     : undefined
+  const marks = gitMarksOf(opts?.marks)
   return {
     sessionId: session.id,
     workspaceTitle,
@@ -302,6 +314,7 @@ function toCard(
     identity: identityOf(workspaceTitle),
     ...(liveStatus !== undefined ? { liveStatus } : {}),
     ...(relativeTime !== undefined ? { relativeTime } : {}),
+    ...(marks !== undefined ? { marks } : {}),
     selected: session.id === current,
     ...(opts?.unsentDraft === true ? { unsentDraft: true } : {}),
     ...(opts?.slim === true ? { slim: true } : {}),
@@ -330,11 +343,13 @@ export function project(input: ProjectInput): ViewModel {
   const settled: Card[] = []
   for (const session of listed) {
     const draft = draftOf(input, session.id)
+    const git = input.gitMarks?.[session.id]
     if (session.blank) {
       if (draft !== '') {
         unsentDrafts.push(toCard(session, input.workspaces, input.current, {
           preview: draft,
           ...(now !== undefined ? { now } : {}),
+          ...(git !== undefined ? { marks: git } : {}),
         }))
         continue
       }
@@ -354,6 +369,7 @@ export function project(input: ProjectInput): ViewModel {
         ...(onSnoozed && until !== undefined ? { wakeAt: until } : {}),
         ...(onSettled && entry?.settledAt !== undefined ? { settledAt: entry.settledAt } : {}),
         ...(now !== undefined ? { now } : {}),
+        ...(git !== undefined ? { marks: git } : {}),
       },
     )
     if (onSnoozed) snoozed.push(card)

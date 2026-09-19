@@ -1,6 +1,7 @@
-import { LEDGER_APPLY, LEDGER_GET } from '../contract.ts'
+import { GIT_PROBE, LEDGER_APPLY, LEDGER_GET } from '../contract.ts'
 import { isRecord } from '../ledger-json.ts'
 import { apply, type Command } from '../taskbar.ts'
+import { probeGitMarks } from './git-probe.ts'
 import { readLedgerFile, writeLedgerFile } from './ledger-file.ts'
 
 function fail(message: string): { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } } {
@@ -72,6 +73,11 @@ export async function handleLedgerRpc(endpoint: string, payload: unknown): Promi
   if (endpoint === LEDGER_GET) {
     return { ok: true, value: readLedgerFile() }
   }
+  if (endpoint === GIT_PROBE) {
+    const paths = decodePaths(payload)
+    if (paths === undefined) return fail('invalid git probe payload')
+    return { ok: true, value: await probeGitMarks(paths) }
+  }
   if (endpoint !== LEDGER_APPLY) return fail('unknown endpoint')
   if (!isRecord(payload) || typeof payload.revision !== 'number') return fail('invalid apply payload')
   const command = decodeCommand(payload.command)
@@ -85,6 +91,16 @@ export async function handleLedgerRpc(endpoint: string, payload: unknown): Promi
   const next = { revision: current.revision + 1, records }
   writeLedgerFile(next)
   return { ok: true, value: next }
+}
+
+function decodePaths(payload: unknown): string[] | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.paths)) return undefined
+  const paths: string[] = []
+  for (const path of payload.paths) {
+    if (typeof path !== 'string' || path === '') return undefined
+    paths.push(path)
+  }
+  return paths
 }
 
 function unchanged(left: ReturnType<typeof apply>, right: ReturnType<typeof apply>): boolean {

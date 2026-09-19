@@ -285,11 +285,11 @@ export function Taskbar(props: Props) {
       : { type: 'Snooze', sessionId, until, pendingInteraction: pending })
   }
 
-  const openMenu = (event: ReactMouseEvent, id: string) => {
+  const openMenu = (event: ReactMouseEvent, id: string, snooze = false) => {
     event.preventDefault()
     event.stopPropagation()
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-    setSnoozePanel(false)
+    setSnoozePanel(snooze)
     setCustomUntil(toDatetimeLocal(Date.now() + HOUR_MS))
     setMenu({ id, x: Math.min(window.innerWidth - 210, rect.right - 180), y: Math.min(window.innerHeight - 280, rect.bottom + 4) })
   }
@@ -467,8 +467,8 @@ export function Taskbar(props: Props) {
     if (!searching && snoozedIds.has(card.sessionId)) return renderSnoozed(card)
     if (!searching && (settledIds.has(card.sessionId) || card.slim === true)) return renderSettled(card, drop?.index)
     const pinned = pinnedIds.has(card.sessionId)
-    const pinVerb = pinned ? 'unpin' : 'pin'
     const canSettle = started(card.sessionId) && !snoozedIds.has(card.sessionId) && !settledIds.has(card.sessionId)
+    const canSnooze = canSettle && !pinned && list.byId[card.sessionId as never]?.pendingInteraction === undefined
     return (
       <div
         key={card.sessionId}
@@ -487,14 +487,16 @@ export function Taskbar(props: Props) {
         </div>
         {started(card.sessionId) ? (
           <>
-            <button
-              type="button"
-              className="dsht3-pin"
-              aria-label={t(pinVerb)}
-              onClick={() => onTogglePin(card.sessionId, pinned)}
-            >
-              {t(pinVerb)}
-            </button>
+            {pinned ? (
+              <button
+                type="button"
+                className="dsht3-pin"
+                aria-label={t('unpin')}
+                onClick={() => onTogglePin(card.sessionId, true)}
+              >
+                {t('unpin')}
+              </button>
+            ) : null}
             {canSettle ? (
               <button
                 type="button"
@@ -503,6 +505,16 @@ export function Taskbar(props: Props) {
                 onClick={() => send({ type: 'Settle', sessionId: card.sessionId, at: Date.now() })}
               >
                 {t('settle')}
+              </button>
+            ) : null}
+            {canSnooze ? (
+              <button
+                type="button"
+                className="dsht3-act"
+                aria-label={t('menu.snooze')}
+                onClick={(event) => openMenu(event, card.sessionId, true)}
+              >
+                {t('menu.snooze')}
               </button>
             ) : null}
             <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>

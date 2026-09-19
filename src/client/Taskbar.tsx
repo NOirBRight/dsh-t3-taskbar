@@ -451,7 +451,8 @@ export function Taskbar(props: Props) {
     )
   }
 
-  const directoryFlow = flowOpen && directoryFlowAvailable && renderSlot !== undefined
+  const canRaiseDirectoryFlow = directoryFlowAvailable && renderSlot !== undefined
+  const directoryFlow = flowOpen && canRaiseDirectoryFlow
     ? renderSlot('sidebar.workspaces.directoryFlow', {
       open: flowOpen,
       busy: flowBusy,
@@ -473,7 +474,7 @@ export function Taskbar(props: Props) {
         <button type="button" className="dsht3-icon" aria-label={t('search.aria')} onClick={() => expandSidebar()}>
           <SearchIcon />
         </button>
-        {directoryFlowAvailable ? (
+        {canRaiseDirectoryFlow ? (
           <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => { setFlowOpen(true); expandSidebar() }}>
             <AddWorkspaceIcon />
           </button>
@@ -495,7 +496,7 @@ export function Taskbar(props: Props) {
         <label className="dsht3-search">
           <input value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
         </label>
-        {directoryFlowAvailable ? <button type="button" className="dsht3-add" onClick={() => setFlowOpen(true)}>{t('workspace.add')}</button> : null}
+        {canRaiseDirectoryFlow ? <button type="button" className="dsht3-add" onClick={() => setFlowOpen(true)}>{t('workspace.add')}</button> : null}
         {directoryFlow}
       </div>
       <div className="dsht3-list">

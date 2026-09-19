@@ -1,7 +1,6 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-connection/client'
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,17 +16,46 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export const name = 'dsh-t3-taskbar-client'
-export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection', 'layout']
+/** Apply before ui-workspace so this occupant declares directoryFlow (ADR 0002). */
+export const inject = ['slots', 'locale']
 
-export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-t3-taskbar: dictionaries')
-  ensureTaskbarStyles()
-  const connection = ctx.get('connection')
-  bindLedgerRpc(connection.rpc)
-  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
-    name: 'sidebar.workspaces',
+const DIRECTORY_FLOW = 'sidebar.workspaces.directoryFlow' as const
+
+function withoutChildren<T extends { children?: unknown }>(options: T): Omit<T, 'children'> {
+  const { children: _dropped, ...rest } = options
+  return rest
+}
+
+function wrapRegisterKeepingFirstDirectoryFlowDeclarer(slots: ClientContext['slots']): boolean {
+  const registry = (slots as unknown as Record<symbol, {
+    _register: (options: { children?: Record<string, unknown> }, component: unknown) => () => void
+  }>)[Symbol.for('cordis.original')]
+  if (registry === undefined) return false
+  const register = registry._register.bind(registry)
+  registry._register = (options, component) => {
+    const children = options.children
+    if (children?.[DIRECTORY_FLOW] === undefined || slots.spec(DIRECTORY_FLOW) === undefined) {
+      return register(options, component)
+    }
+    const { [DIRECTORY_FLOW]: _dropped, ...kept } = children
+    return register(
+      Object.keys(kept).length === 0 ? withoutChildren(options) : { ...options, children: kept },
+      component,
+    )
+  }
+  return true
+}
+
+function occupyWorkspaces(ctx: ClientContext, wrapAttached: boolean): () => void {
+  const options = {
+    name: 'sidebar.workspaces' as const,
     priority: -1,
     locale: NS,
+    ...wrapAttached ? {
+      children: {
+        [DIRECTORY_FLOW]: { kind: 'single' as const, scope: 'root' as const },
+      },
+    } : {},
     inject: () => ({
       startSession: (workspaceId?: string) => ctx.workspaces.startSession(workspaceId as never),
       open: (sessionId: string) => ctx.sessions.open(sessionId as never),
@@ -66,10 +94,26 @@ export function apply(ctx: ClientContext): void {
       createWorkspace: (input: { path: string }) => ctx.workspaces.create(input),
       hooks: {
         directoryFlow: {
-          getSnapshot: () => ctx.slots.entries('sidebar.workspaces.directoryFlow').length > 0,
-          subscribe: (listener: () => void) => ctx.slots.subscribe('sidebar.workspaces.directoryFlow', listener),
+          getSnapshot: () => ctx.slots.entries(DIRECTORY_FLOW).length > 0,
+          subscribe: (listener: () => void) => ctx.slots.subscribe(DIRECTORY_FLOW, listener),
         },
       },
     }),
-  }, Taskbar as never))
+  }
+  try {
+    return ctx.slots.register(options, Taskbar as never)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('already declared')) throw error
+    return ctx.slots.register(withoutChildren(options), Taskbar as never)
+  }
+}
+
+export function apply(ctx: ClientContext): void {
+  ctx.locale.register(NS, { zh, en })
+  ensureTaskbarStyles()
+  const wrapAttached = wrapRegisterKeepingFirstDirectoryFlowDeclarer(ctx.slots)
+  ctx.inject(['connection'], (inner) => {
+    bindLedgerRpc(inner.get('connection').rpc)
+  })
+  ctx.slots.inject('sidebar.workspaces', () => occupyWorkspaces(ctx, wrapAttached))
 }

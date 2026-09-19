@@ -2,7 +2,8 @@
 
 import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
-import type { CardMarks } from '../taskbar.ts'
+import { isRecord } from '../ledger-json.ts'
+import type { GitMarks } from '../taskbar.ts'
 
 const TTL_MS = 30_000
 const TIMEOUT_MS = 8_000
@@ -13,8 +14,8 @@ const silentEnv: NodeJS.ProcessEnv = {
   GH_PROMPT_DISABLED: '1',
 }
 
-const cache = new Map<string, { at: number; marks: CardMarks }>()
-const inflight = new Map<string, Promise<CardMarks>>()
+const cache = new Map<string, { at: number; marks: GitMarks }>()
+const inflight = new Map<string, Promise<GitMarks>>()
 
 async function run(cmd: string, args: readonly string[], cwd: string): Promise<string | undefined> {
   try {
@@ -75,10 +76,10 @@ async function ghAuthed(cwd: string): Promise<boolean> {
   }
 }
 
-async function probePath(path: string): Promise<CardMarks> {
+async function probePath(path: string): Promise<GitMarks> {
   const inside = await run('git', ['rev-parse', '--is-inside-work-tree'], path)
   if (inside !== 'true') return {}
-  const marks: CardMarks = {}
+  const marks: GitMarks = {}
   const branch = await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], path)
   if (branch !== undefined && branch !== '') marks.branch = branch
   const toplevel = await run('git', ['rev-parse', '--show-toplevel'], path)
@@ -94,7 +95,7 @@ async function probePath(path: string): Promise<CardMarks> {
   return marks
 }
 
-async function probePathCached(path: string, now: number): Promise<CardMarks> {
+async function probePathCached(path: string, now: number): Promise<GitMarks> {
   const hit = cache.get(path)
   if (hit !== undefined && now - hit.at < TTL_MS) return hit.marks
   const pending = inflight.get(path)
@@ -111,12 +112,22 @@ async function probePathCached(path: string, now: number): Promise<CardMarks> {
   return work
 }
 
-export async function probeGitMarks(paths: readonly string[]): Promise<Record<string, CardMarks>> {
+export async function probeGitMarks(paths: readonly string[]): Promise<Record<string, GitMarks>> {
   const now = Date.now()
-  const result: Record<string, CardMarks> = {}
+  const result: Record<string, GitMarks> = {}
   await Promise.all(paths.map(async (path) => {
     const marks = await probePathCached(path, now)
     if (Object.keys(marks).length > 0) result[path] = marks
   }))
   return result
+}
+
+export function decodeGitProbePaths(payload: unknown): string[] | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.paths)) return undefined
+  const paths: string[] = []
+  for (const path of payload.paths) {
+    if (typeof path !== 'string' || path === '') return undefined
+    paths.push(path)
+  }
+  return paths
 }

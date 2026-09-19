@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type CardMarks, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
+import { project, type Card, type CardMarks, type Command, type GitMarks, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
-import { AddWorkspaceIcon, AgyRuntimeIcon, CursorRuntimeIcon, DshRuntimeIcon, NewSessionIcon, PenIcon, SearchIcon } from './icons.tsx'
-import { applyLedger, loadGitMarks, loadLedger } from './ledger.ts'
-import { EMPTY_LEDGER } from '../ledger-json.ts'
+import { AddWorkspaceIcon, AgyRuntimeIcon, CursorRuntimeIcon, DshRuntimeIcon, NewSessionIcon, PenIcon, PluginIcon, SearchIcon } from './icons.tsx'
+import { loadGitMarks } from './git-marks.ts'
+import { applyLedger, loadLedger } from './ledger.ts'
+import { officialSettingsTrigger } from './settings-trigger.ts'
+import { EMPTY_LEDGER, isRecord } from '../ledger-json.ts'
 import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
 import { formatWake, HOUR_MS, laterToday18, toDatetimeLocal, tomorrow09 } from './snooze-time.ts'
 
-type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string; acpPresent?: boolean }
+type Props = Omit<WorkspaceBrowserProps, 't'> & {
+  t: (key: TaskbarKey) => string
+  acpPresent?: boolean
+  openSettings?: () => boolean
+}
 
 const SEARCH_DEBOUNCE_MS = 250
 const NOW_TICK_MS = 1000
@@ -60,16 +66,15 @@ function RuntimeMark({ runtime, t }: { runtime: NonNullable<CardMarks['runtime']
 }
 
 function providerOf(session: unknown): string | undefined {
-  if (session === undefined || session === null || typeof session !== 'object') return undefined
-  const values = (session as { projectionValues?: unknown }).projectionValues
-  if (values === undefined || values === null || typeof values !== 'object') return undefined
-  const selection = (values as { modelSelection?: unknown }).modelSelection
-  if (selection === undefined || selection === null || typeof selection !== 'object') return undefined
-  const rec = selection as { next?: unknown; lastUsed?: unknown }
-  for (const candidate of [rec.next, rec.lastUsed]) {
-    if (candidate === undefined || candidate === null || typeof candidate !== 'object') continue
-    const provider = (candidate as { provider?: unknown }).provider
-    if (typeof provider === 'string') return provider
+  if (!isRecord(session)) return undefined
+  const values = session.projectionValues
+  if (!isRecord(values)) return undefined
+  const selection = values.modelSelection
+  if (!isRecord(selection)) return undefined
+  for (const candidate of [selection.next, selection.lastUsed]) {
+    if (!isRecord(candidate)) continue
+    const provider = candidate.provider
+    if (typeof provider === 'string' && provider !== '') return provider
   }
   return undefined
 }
@@ -81,6 +86,20 @@ function providersOf(list: { ids: readonly string[]; byId: Record<string, unknow
     if (provider !== undefined) out[id] = provider
   }
   return out
+}
+
+function PluginsButton({
+  t,
+  onClick,
+}: {
+  t: Props['t']
+  onClick: () => void
+}) {
+  return (
+    <button type="button" className="dsht3-icon" aria-label={t('plugins.aria')} onClick={onClick}>
+      <PluginIcon />
+    </button>
+  )
 }
 
 function IdentityMark({ card }: { card: Card }) {
@@ -135,13 +154,14 @@ export function Taskbar(props: Props) {
     renderSlot,
     t,
     acpPresent = false,
+    openSettings,
   } = props
 
   const list = useSessions((state) => state)
   const workspaces = useWorkspaces((state) => state)
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
   const [ledger, setLedger] = useState(() => ({ revision: 0, records: {} as typeof EMPTY_LEDGER.records }))
-  const [gitMarks, setGitMarks] = useState<Readonly<Record<string, CardMarks>>>({})
+  const [gitMarks, setGitMarks] = useState<Readonly<Record<string, GitMarks>>>({})
   const sessionIds = list.ids
   const drafts = useSyncExternalStore(
     subscribeDrafts,
@@ -159,6 +179,7 @@ export function Taskbar(props: Props) {
   const [now, setNow] = useState(() => Date.now())
   const [flowOpen, setFlowOpen] = useState(false)
   const [flowBusy, setFlowBusy] = useState(false)
+  const [settingsTriggerPresent, setSettingsTriggerPresent] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<DropHint | null>(null)
 
@@ -166,6 +187,10 @@ export function Taskbar(props: Props) {
     const timer = window.setInterval(() => setNow(Date.now()), NOW_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    setSettingsTriggerPresent(openSettings !== undefined && officialSettingsTrigger() !== undefined)
+  }, [openSettings, now])
 
   const livingIdsKey = useMemo(
     () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
@@ -193,29 +218,24 @@ export function Taskbar(props: Props) {
     sessionIds: workspace.sessionIds,
   }))
 
-  const probeKey = useMemo(() => {
-    const rows: string[] = []
+  const probeSessions = useMemo(() => {
+    const rows: { id: string; path: string }[] = []
     for (const id of list.ids) {
       const session = list.byId[id]
       if (session === undefined) continue
       const workspace = workspaces.items.find((item) => item.sessionIds.includes(id))
       const path = session.cwd !== undefined && session.cwd !== '' ? session.cwd : workspace?.path
       if (path === undefined || path === '') continue
-      rows.push(`${id}\0${path}`)
+      rows.push({ id, path })
     }
-    return rows.join('\n')
+    return rows
   }, [list, workspaces])
 
   useEffect(() => {
     if (list.phase !== 'ready') return
     let cancelled = false
-    const sessions = probeKey === '' ? [] : probeKey.split('\n').flatMap((row) => {
-      const split = row.indexOf('\0')
-      if (split <= 0) return []
-      return [{ id: row.slice(0, split), path: row.slice(split + 1) }]
-    })
     const load = () => {
-      void loadGitMarks(sessions).then((marks) => {
+      void loadGitMarks(probeSessions).then((marks) => {
         if (!cancelled) setGitMarks(marks)
       })
     }
@@ -225,7 +245,7 @@ export function Taskbar(props: Props) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [probeKey, list.phase])
+  }, [probeSessions, list.phase])
 
   const showWorkspaceFilter = workspaces.items.length > 1
   const filterId = showWorkspaceFilter
@@ -310,7 +330,7 @@ export function Taskbar(props: Props) {
         sessionId,
         workspaceTitle: '',
         sessionTitle: snippet,
-        identity: { monogram: 'PR', color: 'fuchsia' },
+        identity: { monogram: 'WS', color: 'gray' },
         selected: list.current === sessionId,
       }
     }
@@ -618,6 +638,11 @@ export function Taskbar(props: Props) {
   }
 
   const canRaiseDirectoryFlow = directoryFlowAvailable && renderSlot !== undefined
+  const showPlugins = openSettings !== undefined && settingsTriggerPresent
+  const onPlugins = (expand = false) => {
+    if (expand) expandSidebar()
+    if (openSettings === undefined || openSettings() === false) setSettingsTriggerPresent(false)
+  }
   const directoryFlow = flowOpen && canRaiseDirectoryFlow
     ? renderSlot('sidebar.workspaces.directoryFlow', {
       open: flowOpen,
@@ -640,6 +665,7 @@ export function Taskbar(props: Props) {
         <button type="button" className="dsht3-icon" aria-label={t('search.aria')} onClick={() => expandSidebar()}>
           <SearchIcon />
         </button>
+        {showPlugins ? <PluginsButton t={t} onClick={() => onPlugins(true)} /> : null}
         {canRaiseDirectoryFlow ? (
           <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => { setFlowOpen(true); expandSidebar() }}>
             <AddWorkspaceIcon />
@@ -665,6 +691,7 @@ export function Taskbar(props: Props) {
         <label className="dsht3-search">
           <input value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
         </label>
+        {showPlugins ? <PluginsButton t={t} onClick={() => onPlugins()} /> : null}
         {showWorkspaceFilter ? (
           <select
             className="dsht3-filter"

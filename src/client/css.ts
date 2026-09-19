@@ -38,9 +38,23 @@ export function ensureTaskbarStyles(): void {
 .dsht3-meta { flex:none; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-ident { flex:none; width:16px; height:16px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; overflow:hidden; font:var(--dsw-font-xxs-12); font-weight:700; font-size:8px; line-height:1; letter-spacing:-0.04em; color:var(--dsw-alias-state-business-primary); background:color-mix(in srgb, currentColor 14%, transparent); }
 .dsht3-ident[data-color="gray"] { color:var(--dsw-alias-label-tertiary); }
-.dsht3-ident[data-color="red"], .dsht3-ident[data-color="rose"], .dsht3-ident[data-color="pink"], .dsht3-ident[data-color="fuchsia"] { color:var(--dsw-alias-state-error-primary); }
-.dsht3-ident[data-color="orange"], .dsht3-ident[data-color="amber"], .dsht3-ident[data-color="yellow"] { color:var(--dsw-alias-state-warn-primary); }
-.dsht3-ident[data-color="lime"], .dsht3-ident[data-color="green"], .dsht3-ident[data-color="emerald"], .dsht3-ident[data-color="teal"] { color:var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="red"] { color:var(--dsw-alias-state-error-primary); }
+.dsht3-ident[data-color="orange"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, var(--dsw-alias-state-warn-primary)); }
+.dsht3-ident[data-color="amber"] { color:var(--dsw-alias-state-warn-primary); }
+.dsht3-ident[data-color="yellow"] { color:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 55%, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="lime"] { color:color-mix(in srgb, var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)) 70%, var(--dsw-alias-state-warn-primary)); }
+.dsht3-ident[data-color="green"] { color:var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="emerald"] { color:color-mix(in srgb, var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)) 75%, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="teal"] { color:color-mix(in srgb, var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary)) 45%, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="cyan"] { color:color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, var(--dsw-alias-state-success-primary, var(--dsw-alias-state-business-primary))); }
+.dsht3-ident[data-color="sky"] { color:color-mix(in srgb, var(--dsw-alias-state-business-primary) 80%, var(--dsw-alias-label-primary)); }
+.dsht3-ident[data-color="blue"] { color:var(--dsw-alias-state-business-primary); }
+.dsht3-ident[data-color="indigo"] { color:color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-state-error-primary)); }
+.dsht3-ident[data-color="violet"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="purple"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 65%, var(--dsw-alias-label-secondary)); }
+.dsht3-ident[data-color="fuchsia"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 80%, var(--dsw-alias-state-business-primary)); }
+.dsht3-ident[data-color="pink"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 70%, var(--dsw-alias-label-primary)); }
+.dsht3-ident[data-color="rose"] { color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 85%, var(--dsw-alias-state-warn-primary)); }
 .dsht3-more { flex:none; width:28px; margin:6px 4px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-tertiary); cursor:pointer; }
 .dsht3-more:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
 .dsht3-act, .dsht3-unsettle, .dsht3-more { display:none; }

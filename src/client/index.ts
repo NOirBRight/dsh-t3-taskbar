@@ -4,10 +4,11 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
-import { createElement } from 'react'
+import { createElement, useSyncExternalStore } from 'react'
 import { Taskbar } from './Taskbar.tsx'
 import { ensureTaskbarStyles } from './css.ts'
-import { bindLedgerRpc } from './ledger.ts'
+import { bindTaskbarRpc } from './rpc.ts'
+import { openOfficialSettings } from './settings-trigger.ts'
 import { en, NS, zh, type TaskbarKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -27,8 +28,8 @@ function acpPresentOf(ctx: unknown): boolean {
     const registry = (ctx as { registry?: { values?: () => Iterable<{ name?: string }> } }).registry
     const values = registry?.values
     if (typeof values !== 'function') return false
-    for (const runtime of values.call(registry)) {
-      const name = runtime?.name
+    for (const plugin of values.call(registry)) {
+      const name = plugin?.name
       if (typeof name !== 'string') continue
       if (name.includes('acp-antigravity') || name.includes('acp-cursor')) return true
     }
@@ -63,9 +64,21 @@ function wrapRegisterKeepingFirstDirectoryFlowDeclarer(slots: ClientContext['slo
   return true
 }
 
+const SETTINGS_SEAT = 'sidebar.settings' as const
+
 function occupyWorkspaces(ctx: ClientContext, wrapAttached: boolean): () => void {
-  const Occupant = (props: Parameters<typeof Taskbar>[0]) =>
-    createElement(Taskbar, { ...props, acpPresent: acpPresentOf(ctx) })
+  const Occupant = (props: Parameters<typeof Taskbar>[0]) => {
+    const settingsAvailable = useSyncExternalStore(
+      (listener) => ctx.slots.subscribe(SETTINGS_SEAT, listener),
+      () => ctx.slots.entries(SETTINGS_SEAT).length > 0,
+      () => false,
+    )
+    return createElement(Taskbar, {
+      ...props,
+      acpPresent: acpPresentOf(ctx),
+      ...(settingsAvailable ? { openSettings: openOfficialSettings } : {}),
+    })
+  }
   const options = {
     name: 'sidebar.workspaces' as const,
     priority: -1,
@@ -132,7 +145,7 @@ export function apply(ctx: ClientContext): void {
   ensureTaskbarStyles()
   const wrapAttached = wrapRegisterKeepingFirstDirectoryFlowDeclarer(ctx.slots)
   ctx.inject(['connection'], (inner) => {
-    bindLedgerRpc(inner.get('connection').rpc)
+    bindTaskbarRpc(inner.get('connection').rpc)
   })
   ctx.slots.inject('sidebar.workspaces', () => occupyWorkspaces(ctx, wrapAttached))
 }

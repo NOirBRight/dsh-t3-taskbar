@@ -25,6 +25,14 @@ export function NewSessionIcon() {
   )
 }
 
+export function PluginIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6.5 2.5V4H4.5A1.5 1.5 0 0 0 3 5.5V7h1.5a1.5 1.5 0 1 1 0 3H3v1.5A1.5 1.5 0 0 0 4.5 13H6.5v1.5a1.5 1.5 0 1 0 3 0V13H11.5A1.5 1.5 0 0 0 13 11.5V10h-1.5a1.5 1.5 0 1 1 0-3H13V5.5A1.5 1.5 0 0 0 11.5 4H9.5V2.5a1.5 1.5 0 1 0-3 0Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export function PenIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">

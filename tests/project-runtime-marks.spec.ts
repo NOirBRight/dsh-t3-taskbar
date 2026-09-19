@@ -65,7 +65,6 @@ describe('project runtime marks', () => {
       ['deepseek', 'dsh'],
       ['codex', 'dsh'],
       ['openai', 'dsh'],
-      ['', 'dsh'],
     ] as const
     for (const [provider, runtime] of mapped) {
       const view = project({
@@ -77,6 +76,17 @@ describe('project runtime marks', () => {
       })
       expect(view.shelves.active[0]?.marks).toEqual({ runtime })
     }
+  })
+
+  it('omits runtime when the provider string is empty', () => {
+    const view = project({
+      sessions: [session],
+      workspaces,
+      archivedSessionIds: [],
+      acpPresent: true,
+      providers: { s1: '' },
+    })
+    expect(view.shelves.active[0]?.marks).toBeUndefined()
   })
 
   it('omits runtime when acpPresent is missing even if providers are supplied', () => {

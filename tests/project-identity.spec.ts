@@ -33,7 +33,7 @@ describe('project Workspace Identity', () => {
     ])
   })
 
-  it('uses PR for an empty or mark-less Workspace title', () => {
+  it('uses WS for an empty or mark-less Workspace title', () => {
     const view = project({
       sessions: [
         { id: 's1', title: 'Fix login', updatedAt: 2, running: false, blank: false },
@@ -45,8 +45,8 @@ describe('project Workspace Identity', () => {
       ],
       archivedSessionIds: [],
     })
-    expect(view.shelves.active[0]?.identity).toEqual({ monogram: 'PR', color: 'fuchsia' })
-    expect(view.shelves.active[1]?.identity).toEqual({ monogram: 'PR', color: 'cyan' })
+    expect(view.shelves.active[0]?.identity).toEqual({ monogram: 'WS', color: 'gray' })
+    expect(view.shelves.active[1]?.identity).toEqual({ monogram: 'WS', color: 'cyan' })
   })
 
   it('derives monograms from first word, last word, and digits', () => {

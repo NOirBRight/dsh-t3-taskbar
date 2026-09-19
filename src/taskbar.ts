@@ -25,10 +25,13 @@ export interface Workspace {
   sessionIds: readonly string[]
 }
 
-export interface CardMarks {
+export interface GitMarks {
   branch?: string
   worktree?: string
   pr?: string
+}
+
+export interface CardMarks extends GitMarks {
   runtime?: 'dsh' | 'agy' | 'cursor'
 }
 
@@ -43,7 +46,7 @@ export interface ProjectInput {
   /** Browser-local Workspace id. When set, Sessions outside that Workspace are omitted. Not a ledger field. */
   workspaceFilter?: string
   /** Host-probed git facts keyed by Session id. Copied onto Card marks; runtime is ticket 12. */
-  gitMarks?: Readonly<Record<string, CardMarks>>
+  gitMarks?: Readonly<Record<string, GitMarks>>
   /** True when an AGY or Cursor ACP plugin is installed. Runtime marks are omitted when false or missing. */
   acpPresent?: boolean
   /** ModelSelection.provider strings keyed by Session id. Missing keys omit the Runtime mark. */
@@ -253,17 +256,17 @@ function identityOf(title: string): WorkspaceIdentity {
   const normalized = title.normalize('NFKC').trim()
   const words = normalized.match(/[\p{L}\p{N}]+/gu) ?? []
   const firstWord = words[0]
-  let monogram = 'PR'
+  let monogram = 'WS'
   if (firstWord !== undefined) {
     const glyphs = Array.from(firstWord)
-    const first = glyphs[0] ?? 'P'
+    const first = glyphs[0] ?? 'W'
     const second =
       glyphs.slice(1).find((glyph) => /\p{N}/u.test(glyph))
       ?? (words.length > 1 ? Array.from(words.at(-1) ?? '')[0] : glyphs.at(-1))
       ?? first
     monogram = Array.from(`${first}${second}`.toUpperCase()).slice(0, 2).join('')
   }
-  const seed = normalized.toLocaleLowerCase('en-US') || 'project'
+  const seed = normalized.toLocaleLowerCase('en-US') || 'unnamed'
   let index = 0
   for (const glyph of seed) {
     index = (index * 31 + (glyph.codePointAt(0) ?? 0)) % IDENTITY_COLORS.length
@@ -289,28 +292,27 @@ function relativeTimeOf(updatedAt: number, now: number): RelativeTime {
   return { unit: 'years', n: Math.floor(diff / (365 * day)) }
 }
 
-function gitMarksOf(raw: CardMarks | undefined): CardMarks | undefined {
+export function copyGitMarks(raw: GitMarks | undefined): GitMarks | undefined {
   if (raw === undefined) return undefined
-  const marks: CardMarks = {}
+  const marks: GitMarks = {}
   if (raw.branch !== undefined && raw.branch !== '') marks.branch = raw.branch
   if (raw.worktree !== undefined && raw.worktree !== '') marks.worktree = raw.worktree
   if (raw.pr !== undefined && raw.pr !== '') marks.pr = raw.pr
-  if (raw.runtime !== undefined) marks.runtime = raw.runtime
   return Object.keys(marks).length === 0 ? undefined : marks
 }
 
 function runtimeOf(input: ProjectInput, sessionId: string): CardMarks['runtime'] {
   if (input.acpPresent !== true) return undefined
   const provider = input.providers?.[sessionId]
-  if (provider === undefined) return undefined
+  if (provider === undefined || provider === '') return undefined
   if (provider === 'cursor-agent' || provider.startsWith('cursor-agent:')) return 'cursor'
   if (provider === 'antigravity' || provider.startsWith('antigravity:') || provider === 'google-antigravity') return 'agy'
   return 'dsh'
 }
 
-function cardMarksOf(git: CardMarks | undefined, runtime: CardMarks['runtime']): CardMarks | undefined {
-  const marks: CardMarks = { ...gitMarksOf(git) }
-  delete marks.runtime
+function cardMarksOf(git: GitMarks | undefined, runtime: CardMarks['runtime']): CardMarks | undefined {
+  const gitMarks = copyGitMarks(git)
+  const marks: CardMarks = gitMarks === undefined ? {} : { ...gitMarks }
   if (runtime !== undefined) marks.runtime = runtime
   return Object.keys(marks).length === 0 ? undefined : marks
 }

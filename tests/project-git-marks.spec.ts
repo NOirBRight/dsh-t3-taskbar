@@ -73,14 +73,4 @@ describe('project git marks', () => {
     })
     expect(empty.shelves.active[0]?.marks).toBeUndefined()
   })
-
-  it('does not copy runtime from gitMarks', () => {
-    const view = project({
-      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
-      workspaces,
-      archivedSessionIds: [],
-      gitMarks: { s1: { branch: 'feat/inbox', runtime: 'dsh' } },
-    })
-    expect(view.shelves.active[0]?.marks).toEqual({ branch: 'feat/inbox' })
-  })
 })

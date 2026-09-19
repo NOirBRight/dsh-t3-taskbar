@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
+import { project, type Card, type CardMarks, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
 import { AddWorkspaceIcon, NewSessionIcon, PenIcon, SearchIcon } from './icons.tsx'
-import { applyLedger, loadLedger } from './ledger.ts'
+import { applyLedger, loadGitMarks, loadLedger } from './ledger.ts'
 import { EMPTY_LEDGER } from '../ledger-json.ts'
 import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
@@ -39,7 +39,10 @@ function lineOneMeta(card: Card, t: Props['t']): string {
 function marksText(card: Card): string {
   const marks = card.marks
   if (marks === undefined) return ''
-  return [marks.branch, marks.worktree, marks.pr, marks.runtime].filter((part) => part !== undefined && part !== '').join(' · ')
+  const worktree = marks.worktree === undefined || marks.worktree === ''
+    ? undefined
+    : marks.worktree === 'true' ? 'worktree' : marks.worktree
+  return [marks.branch, worktree, marks.pr, marks.runtime].filter((part) => part !== undefined && part !== '').join(' · ')
 }
 
 function IdentityMark({ card }: { card: Card }) {
@@ -99,6 +102,7 @@ export function Taskbar(props: Props) {
   const workspaces = useWorkspaces((state) => state)
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
   const [ledger, setLedger] = useState(() => ({ revision: 0, records: {} as typeof EMPTY_LEDGER.records }))
+  const [gitMarks, setGitMarks] = useState<Readonly<Record<string, CardMarks>>>({})
   const sessionIds = list.ids
   const drafts = useSyncExternalStore(
     subscribeDrafts,
@@ -150,6 +154,40 @@ export function Taskbar(props: Props) {
     sessionIds: workspace.sessionIds,
   }))
 
+  const probeKey = useMemo(() => {
+    const rows: string[] = []
+    for (const id of list.ids) {
+      const session = list.byId[id]
+      if (session === undefined) continue
+      const workspace = workspaces.items.find((item) => item.sessionIds.includes(id))
+      const path = session.cwd !== undefined && session.cwd !== '' ? session.cwd : workspace?.path
+      if (path === undefined || path === '') continue
+      rows.push(`${id}\0${path}`)
+    }
+    return rows.join('\n')
+  }, [list, workspaces])
+
+  useEffect(() => {
+    if (list.phase !== 'ready') return
+    let cancelled = false
+    const sessions = probeKey === '' ? [] : probeKey.split('\n').flatMap((row) => {
+      const split = row.indexOf('\0')
+      if (split <= 0) return []
+      return [{ id: row.slice(0, split), path: row.slice(split + 1) }]
+    })
+    const load = () => {
+      void loadGitMarks(sessions).then((marks) => {
+        if (!cancelled) setGitMarks(marks)
+      })
+    }
+    load()
+    const timer = window.setInterval(load, 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [probeKey, list.phase])
+
   const showWorkspaceFilter = workspaces.items.length > 1
   const filterId = showWorkspaceFilter
     && workspaceFilter !== undefined
@@ -166,6 +204,7 @@ export function Taskbar(props: Props) {
     sessions,
     workspaces: projectWorkspaces,
     ...(filterId !== undefined ? { workspaceFilter: filterId } : {}),
+    ...(Object.keys(gitMarks).length === 0 ? {} : { gitMarks }),
   })
 
   const view = useMemo(
@@ -174,7 +213,7 @@ export function Taskbar(props: Props) {
       if (session === undefined) return []
       return [toSession(id, session)]
     })),
-    [list, workspaces, ledger.records, drafts, now, filterId],
+    [list, workspaces, ledger.records, drafts, now, filterId, gitMarks],
   )
 
   const cards = shelfCards(view)
@@ -428,37 +467,41 @@ export function Taskbar(props: Props) {
     )
   }
 
-  const renderSettled = (card: Card, index = 0) => (
-    <div
-      key={card.sessionId}
-      className={`${rowClass(card)} dsht3-slim`}
-      {...(searching ? {} : bindDrag(card.sessionId, { dest: 'settled', index }))}
-    >
+  const renderSettled = (card: Card, index = 0) => {
+    const pr = card.marks?.pr
+    return (
       <div
-        className="dsht3-card"
-        role="button"
-        tabIndex={0}
-        aria-current={card.selected ? true : undefined}
-        onClick={() => onOpen(card.sessionId)}
-        onKeyDown={openOnKey(card.sessionId)}
+        key={card.sessionId}
+        className={`${rowClass(card)} dsht3-slim`}
+        {...(searching ? {} : bindDrag(card.sessionId, { dest: 'settled', index }))}
       >
-        <span className="dsht3-line1">
-          <IdentityMark card={card} />
-          <span className="dsht3-title">{card.sessionTitle}</span>
-          <span className="dsht3-meta">{card.settledAt === undefined ? '' : formatSettled(card.settledAt, t)}</span>
-        </span>
+        <div
+          className="dsht3-card"
+          role="button"
+          tabIndex={0}
+          aria-current={card.selected ? true : undefined}
+          onClick={() => onOpen(card.sessionId)}
+          onKeyDown={openOnKey(card.sessionId)}
+        >
+          <span className="dsht3-line1">
+            <IdentityMark card={card} />
+            <span className="dsht3-title">{card.sessionTitle}</span>
+            {pr === undefined || pr === '' ? null : <span className="dsht3-meta">{pr}</span>}
+            <span className="dsht3-meta">{card.settledAt === undefined ? '' : formatSettled(card.settledAt, t)}</span>
+          </span>
+        </div>
+        <button
+          type="button"
+          className="dsht3-unsettle"
+          onClick={() => send({ type: 'Unsettle', sessionId: card.sessionId })}
+        >
+          {t('unsettle')}
+        </button>
+        <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
+        {dragVerb(card.sessionId)}
       </div>
-      <button
-        type="button"
-        className="dsht3-unsettle"
-        onClick={() => send({ type: 'Unsettle', sessionId: card.sessionId })}
-      >
-        {t('unsettle')}
-      </button>
-      <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
-      {dragVerb(card.sessionId)}
-    </div>
-  )
+    )
+  }
 
   const renderCard = (card: Card, drop?: DropHint) => {
     if (draftIds.has(card.sessionId) || (!started(card.sessionId) && drafts[card.sessionId])) {

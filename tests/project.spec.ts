@@ -17,6 +17,7 @@ describe('project', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
       },
     ])
@@ -36,6 +37,7 @@ describe('project', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         liveStatus: 'waiting-for-me',
         selected: false,
       },
@@ -154,12 +156,14 @@ describe('project', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
       },
       {
         sessionId: 's2',
         workspaceTitle: 'beta',
         sessionTitle: 'Other',
+        identity: { monogram: 'BA', color: 'pink' },
         selected: true,
       },
     ])

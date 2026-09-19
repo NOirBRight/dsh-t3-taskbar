@@ -33,6 +33,13 @@ export const zh = {
   'draft.unsent': '未发送草稿',
   'draft.discard': '丢弃',
   'draft.pen': '有未发送草稿',
+  'time.now': '刚刚',
+  'time.minutes': '{n}分钟',
+  'time.hours': '{n}小时',
+  'time.days': '{n}天',
+  'time.months': '{n}个月',
+  'time.years': '{n}年',
+  'date.ymd': '{y}年{m}月{d}日',
 }
 
 export const en = {
@@ -68,6 +75,13 @@ export const en = {
   'draft.unsent': 'Unsent Draft',
   'draft.discard': 'Discard',
   'draft.pen': 'Unsent draft',
+  'time.now': 'now',
+  'time.minutes': '{n}min',
+  'time.hours': '{n}h',
+  'time.days': '{n}d',
+  'time.months': '{n}mo',
+  'time.years': '{n}y',
+  'date.ymd': '{y}-{m}-{d}',
 }
 
 export type TaskbarKey = keyof typeof zh

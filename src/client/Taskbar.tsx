@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type Command, type LiveStatus, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
+import { project, type Card, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
 import { AddWorkspaceIcon, PenIcon, SearchIcon } from './icons.tsx'
@@ -16,10 +16,36 @@ type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string
 const SEARCH_DEBOUNCE_MS = 250
 const NOW_TICK_MS = 1000
 
-function lineOne(workspaceTitle: string, liveStatus: LiveStatus | undefined, t: Props['t']): string {
-  const live = liveStatus === undefined ? '' : t(`live.${liveStatus}`)
-  if (workspaceTitle && live) return `${workspaceTitle} · ${live}`
-  return workspaceTitle || live
+function formatRelative(time: RelativeTime, t: Props['t']): string {
+  if (time.unit === 'now') return t('time.now')
+  const key = `time.${time.unit}` as const
+  return t(key).replace('{n}', String(time.n))
+}
+
+function formatSettled(at: number, t: Props['t']): string {
+  const d = new Date(at)
+  return t('date.ymd')
+    .replace('{y}', String(d.getFullYear()))
+    .replace('{m}', String(d.getMonth() + 1))
+    .replace('{d}', String(d.getDate()))
+}
+
+function lineOneMeta(card: Card, t: Props['t']): string {
+  if (card.liveStatus !== undefined) return t(`live.${card.liveStatus}`)
+  if (card.relativeTime !== undefined) return formatRelative(card.relativeTime, t)
+  return ''
+}
+
+function marksText(card: Card): string {
+  const marks = card.marks
+  if (marks === undefined) return ''
+  return [marks.branch, marks.worktree, marks.pr, marks.runtime].filter((part) => part !== undefined && part !== '').join(' · ')
+}
+
+function IdentityMark({ card }: { card: Card }) {
+  return (
+    <span className="dsht3-ident" data-color={card.identity.color} aria-hidden="true">{card.identity.monogram}</span>
+  )
 }
 
 function toSession(id: string, session: {
@@ -188,7 +214,13 @@ export function Taskbar(props: Props) {
     if (workspaces.archivedSessionIds.includes(sessionId as never)) return undefined
     const session = list.byId[sessionId as never]
     if (session === undefined) {
-      return { sessionId, workspaceTitle: '', sessionTitle: snippet, selected: list.current === sessionId }
+      return {
+        sessionId,
+        workspaceTitle: '',
+        sessionTitle: snippet,
+        identity: { monogram: 'PR', color: 'fuchsia' },
+        selected: list.current === sessionId,
+      }
     }
     if (session.origin === 'subagent') return undefined
     const extra = projectSessions([toSession(sessionId, session)])
@@ -320,6 +352,27 @@ export function Taskbar(props: Props) {
   const rowClass = (card: Card) =>
     `dsht3-row${card.selected ? ' dsht3-on' : ''}${dragId === card.sessionId ? ' dsht3-dragging' : ''}`
 
+  const cardBody = (card: Card) => {
+    const meta = lineOneMeta(card, t)
+    const marks = marksText(card)
+    return (
+      <>
+        <span className="dsht3-line1">
+          <IdentityMark card={card} />
+          <span className="dsht3-ws">{card.workspaceTitle}</span>
+          {meta === '' ? null : <span className="dsht3-meta">{meta}</span>}
+        </span>
+        <span className="dsht3-line2">
+          {card.unsentDraft === true ? (
+            <span className="dsht3-pen" aria-label={t('draft.pen')}><PenIcon /></span>
+          ) : null}
+          {card.sessionTitle}
+        </span>
+        {marks === '' ? null : <span className="dsht3-line3">{marks}</span>}
+      </>
+    )
+  }
+
   const renderDraft = (card: Card) => (
     <div key={card.sessionId} className={`dsht3-row dsht3-draft${card.selected ? ' dsht3-on' : ''}`}>
       <button
@@ -328,8 +381,7 @@ export function Taskbar(props: Props) {
         aria-current={card.selected ? true : undefined}
         onClick={() => onOpen(card.sessionId)}
       >
-        <span className="dsht3-line1">{card.workspaceTitle}</span>
-        <span className="dsht3-line2">{card.sessionTitle}</span>
+        {cardBody(card)}
       </button>
       <button type="button" className="dsht3-discard" onClick={() => discardDraft(card.sessionId)}>
         {t('draft.discard')}
@@ -353,9 +405,10 @@ export function Taskbar(props: Props) {
           onClick={() => onOpen(card.sessionId)}
           onKeyDown={openOnKey(card.sessionId)}
         >
-          <span className="dsht3-line2">{card.sessionTitle}</span>
           <span className="dsht3-line1">
-            {until === undefined ? '' : `${t('snooze.until')} ${formatWake(until)}`}
+            <IdentityMark card={card} />
+            <span className="dsht3-title">{card.sessionTitle}</span>
+            <span className="dsht3-meta">{until === undefined ? '' : `${t('snooze.until')} ${formatWake(until)}`}</span>
           </span>
         </div>
         <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
@@ -367,18 +420,22 @@ export function Taskbar(props: Props) {
   const renderSettled = (card: Card, index = 0) => (
     <div
       key={card.sessionId}
-      className={rowClass(card)}
+      className={`${rowClass(card)} dsht3-slim`}
       {...(searching ? {} : bindDrag(card.sessionId, { dest: 'settled', index }))}
     >
       <div
-        className="dsht3-slim"
+        className="dsht3-card"
         role="button"
         tabIndex={0}
         aria-current={card.selected ? true : undefined}
         onClick={() => onOpen(card.sessionId)}
         onKeyDown={openOnKey(card.sessionId)}
       >
-        {card.sessionTitle}
+        <span className="dsht3-line1">
+          <IdentityMark card={card} />
+          <span className="dsht3-title">{card.sessionTitle}</span>
+          <span className="dsht3-meta">{card.settledAt === undefined ? '' : formatSettled(card.settledAt, t)}</span>
+        </span>
       </div>
       <button
         type="button"
@@ -415,13 +472,7 @@ export function Taskbar(props: Props) {
           onClick={() => onOpen(card.sessionId)}
           onKeyDown={openOnKey(card.sessionId)}
         >
-          <span className="dsht3-line1">{lineOne(card.workspaceTitle, card.liveStatus, t)}</span>
-          <span className="dsht3-line2">
-            {card.unsentDraft === true ? (
-              <span className="dsht3-pen" aria-label={t('draft.pen')}><PenIcon /></span>
-            ) : null}
-            {card.sessionTitle}
-          </span>
+          {cardBody(card)}
         </div>
         {started(card.sessionId) ? (
           <>
@@ -507,20 +558,18 @@ export function Taskbar(props: Props) {
             {/* unsent-draft */}
             {unsentDrafts.length === 0 ? null : (
               <section className="dsht3-block">
-                <div className="dsht3-shead">{t('draft.unsent')}</div>
                 {unsentDrafts.map(renderDraft)}
               </section>
             )}
             {pinned.length > 0 || dragging ? (
               <section className={`dsht3-shelf${dropHint?.dest === 'pinned' ? ' dsht3-drop' : ''}`} {...bindDest('pinned', 0)}>
-                <div className="dsht3-shead">{t('shelf.pinned')}</div>
+                {dragging ? <div className="dsht3-shead">{t('shelf.pinned')}</div> : null}
                 {pinned.map((card, index) => renderCard(card, { dest: 'pinned', index }))}
                 {dragging ? <div className="dsht3-dropzone" {...bindDest('pinned', pinned.length)} /> : null}
               </section>
             ) : null}
             {active.length > 0 || dragging ? (
               <section className={`dsht3-shelf${dropHint?.dest === 'active' ? ' dsht3-drop' : ''}`} {...bindDest('active', 0)}>
-                <div className="dsht3-shead">{t('shelf.active')}</div>
                 {active.map((card, index) => renderCard(card, { dest: 'active', index }))}
                 {dragging ? <div className="dsht3-dropzone" {...bindDest('active', active.length)} /> : null}
               </section>

@@ -19,6 +19,8 @@ describe('project snooze', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
+        relativeTime: { unit: 'now', n: 0 },
         selected: false,
         slim: true,
         wakeAt: 5000,
@@ -42,6 +44,8 @@ describe('project snooze', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
+        relativeTime: { unit: 'now', n: 0 },
         selected: false,
       },
     ])

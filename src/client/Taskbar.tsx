@@ -4,14 +4,14 @@ import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace
 import { project, type Card, type CardMarks, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
-import { AddWorkspaceIcon, NewSessionIcon, PenIcon, SearchIcon } from './icons.tsx'
+import { AddWorkspaceIcon, AgyRuntimeIcon, CursorRuntimeIcon, DshRuntimeIcon, NewSessionIcon, PenIcon, SearchIcon } from './icons.tsx'
 import { applyLedger, loadGitMarks, loadLedger } from './ledger.ts'
 import { EMPTY_LEDGER } from '../ledger-json.ts'
 import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
 import { formatWake, HOUR_MS, laterToday18, toDatetimeLocal, tomorrow09 } from './snooze-time.ts'
 
-type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
+type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string; acpPresent?: boolean }
 
 const SEARCH_DEBOUNCE_MS = 250
 const NOW_TICK_MS = 1000
@@ -36,13 +36,51 @@ function lineOneMeta(card: Card, t: Props['t']): string {
   return ''
 }
 
-function marksText(card: Card): string {
+function gitMarksText(card: Card): string {
   const marks = card.marks
   if (marks === undefined) return ''
   const worktree = marks.worktree === undefined || marks.worktree === ''
     ? undefined
     : marks.worktree === 'true' ? 'worktree' : marks.worktree
-  return [marks.branch, worktree, marks.pr, marks.runtime].filter((part) => part !== undefined && part !== '').join(' · ')
+  return [marks.branch, worktree, marks.pr].filter((part) => part !== undefined && part !== '').join(' · ')
+}
+
+function RuntimeMark({ runtime, t }: { runtime: NonNullable<CardMarks['runtime']>; t: Props['t'] }) {
+  const icon = runtime === 'agy'
+    ? <AgyRuntimeIcon />
+    : runtime === 'cursor'
+      ? <CursorRuntimeIcon />
+      : <DshRuntimeIcon />
+  return (
+    <span className="dsht3-runtime">
+      {icon}
+      {t(`runtime.${runtime}`)}
+    </span>
+  )
+}
+
+function providerOf(session: unknown): string | undefined {
+  if (session === undefined || session === null || typeof session !== 'object') return undefined
+  const values = (session as { projectionValues?: unknown }).projectionValues
+  if (values === undefined || values === null || typeof values !== 'object') return undefined
+  const selection = (values as { modelSelection?: unknown }).modelSelection
+  if (selection === undefined || selection === null || typeof selection !== 'object') return undefined
+  const rec = selection as { next?: unknown; lastUsed?: unknown }
+  for (const candidate of [rec.next, rec.lastUsed]) {
+    if (candidate === undefined || candidate === null || typeof candidate !== 'object') continue
+    const provider = (candidate as { provider?: unknown }).provider
+    if (typeof provider === 'string') return provider
+  }
+  return undefined
+}
+
+function providersOf(list: { ids: readonly string[]; byId: Record<string, unknown> }): Readonly<Record<string, string>> {
+  const out: Record<string, string> = {}
+  for (const id of list.ids) {
+    const provider = providerOf(list.byId[id])
+    if (provider !== undefined) out[id] = provider
+  }
+  return out
 }
 
 function IdentityMark({ card }: { card: Card }) {
@@ -96,6 +134,7 @@ export function Taskbar(props: Props) {
     renameWorkspace,
     renderSlot,
     t,
+    acpPresent = false,
   } = props
 
   const list = useSessions((state) => state)
@@ -195,6 +234,8 @@ export function Taskbar(props: Props) {
     ? workspaceFilter
     : undefined
 
+  const providers = useMemo(() => providersOf(list), [list])
+
   const projectSessions = (sessions: Session[]) => project({
     ...(list.current !== undefined ? { current: list.current } : {}),
     archivedSessionIds: workspaces.archivedSessionIds,
@@ -205,6 +246,8 @@ export function Taskbar(props: Props) {
     workspaces: projectWorkspaces,
     ...(filterId !== undefined ? { workspaceFilter: filterId } : {}),
     ...(Object.keys(gitMarks).length === 0 ? {} : { gitMarks }),
+    ...(acpPresent ? { acpPresent: true } : {}),
+    ...(Object.keys(providers).length === 0 ? {} : { providers }),
   })
 
   const view = useMemo(
@@ -213,7 +256,7 @@ export function Taskbar(props: Props) {
       if (session === undefined) return []
       return [toSession(id, session)]
     })),
-    [list, workspaces, ledger.records, drafts, now, filterId, gitMarks],
+    [list, workspaces, ledger.records, drafts, now, filterId, gitMarks, acpPresent, providers],
   )
 
   const cards = shelfCards(view)
@@ -404,7 +447,8 @@ export function Taskbar(props: Props) {
 
   const cardBody = (card: Card) => {
     const meta = lineOneMeta(card, t)
-    const marks = marksText(card)
+    const git = gitMarksText(card)
+    const runtime = card.marks?.runtime
     return (
       <>
         <span className="dsht3-line1">
@@ -418,7 +462,12 @@ export function Taskbar(props: Props) {
           ) : null}
           {card.sessionTitle}
         </span>
-        {marks === '' ? null : <span className="dsht3-line3">{marks}</span>}
+        {git === '' && runtime === undefined ? null : (
+          <span className="dsht3-line3">
+            {git === '' ? null : <span className="dsht3-git">{git}</span>}
+            {runtime === undefined ? null : <RuntimeMark runtime={runtime} t={t} />}
+          </span>
+        )}
       </>
     )
   }

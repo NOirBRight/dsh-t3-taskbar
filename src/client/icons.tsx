@@ -32,3 +32,28 @@ export function PenIcon() {
     </svg>
   )
 }
+
+export function DshRuntimeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function AgyRuntimeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2.5l2.2 4.4 4.8.6-3.5 3.4.9 4.8L8 13.2l-4.4 2.5.9-4.8L1 7.5l4.8-.6L8 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function CursorRuntimeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4 2.5l9 6.2-4.1.4 2.2 4.9-2.4 1.1-2.2-4.9L4 13.5V2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  )
+}

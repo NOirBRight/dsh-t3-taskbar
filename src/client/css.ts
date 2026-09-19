@@ -30,7 +30,10 @@ export function ensureTaskbarStyles(): void {
 .dsht3-shead button:hover, button.dsht3-shead:hover { color:var(--dsw-alias-label-primary); }
 .dsht3-line1 { display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
 .dsht3-line2, .dsht3-line3 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-.dsht3-line3 { color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
+.dsht3-line3 { display:flex; align-items:center; gap:6px; color:var(--dsw-alias-label-tertiary); font:var(--dsw-font-xxs-12); }
+.dsht3-git { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsht3-runtime { flex:none; display:inline-flex; align-items:center; gap:3px; color:var(--dsw-alias-label-tertiary); }
+.dsht3-runtime svg { display:block; }
 .dsht3-ws, .dsht3-title { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-meta { flex:none; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsht3-ident { flex:none; width:16px; height:16px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; overflow:hidden; font:var(--dsw-font-xxs-12); font-weight:700; font-size:8px; line-height:1; letter-spacing:-0.04em; color:var(--dsw-alias-state-business-primary); background:color-mix(in srgb, currentColor 14%, transparent); }

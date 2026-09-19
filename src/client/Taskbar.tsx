@@ -4,7 +4,7 @@ import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace
 import { project, type Card, type Command, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
-import { AddWorkspaceIcon, PenIcon, SearchIcon } from './icons.tsx'
+import { AddWorkspaceIcon, NewSessionIcon, PenIcon, SearchIcon } from './icons.tsx'
 import { applyLedger, loadLedger } from './ledger.ts'
 import { EMPTY_LEDGER } from '../ledger-json.ts'
 import { matchingIds } from './search.ts'
@@ -83,6 +83,7 @@ export function Taskbar(props: Props) {
     useSessions,
     useWorkspaces,
     open,
+    startSession,
     renameSession,
     forkSession,
     archiveSession,
@@ -105,6 +106,7 @@ export function Taskbar(props: Props) {
     () => EMPTY_DRAFTS,
   )
   const [query, setQuery] = useState('')
+  const [workspaceFilter, setWorkspaceFilter] = useState<string>()
   const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [snoozePanel, setSnoozePanel] = useState(false)
@@ -148,6 +150,13 @@ export function Taskbar(props: Props) {
     sessionIds: workspace.sessionIds,
   }))
 
+  const showWorkspaceFilter = workspaces.items.length > 1
+  const filterId = showWorkspaceFilter
+    && workspaceFilter !== undefined
+    && workspaces.items.some((workspace) => workspace.workspaceId === workspaceFilter)
+    ? workspaceFilter
+    : undefined
+
   const projectSessions = (sessions: Session[]) => project({
     ...(list.current !== undefined ? { current: list.current } : {}),
     archivedSessionIds: workspaces.archivedSessionIds,
@@ -156,6 +165,7 @@ export function Taskbar(props: Props) {
     now,
     sessions,
     workspaces: projectWorkspaces,
+    ...(filterId !== undefined ? { workspaceFilter: filterId } : {}),
   })
 
   const view = useMemo(
@@ -164,7 +174,7 @@ export function Taskbar(props: Props) {
       if (session === undefined) return []
       return [toSession(id, session)]
     })),
-    [list, workspaces, ledger.records, drafts, now],
+    [list, workspaces, ledger.records, drafts, now, filterId],
   )
 
   const cards = shelfCards(view)
@@ -252,6 +262,7 @@ export function Taskbar(props: Props) {
   })()
 
   const onOpen = (sessionId: string) => open(sessionId as never)
+  const onStartSession = () => startSession(filterId as never)
   const send = (command: Command) => {
     void (async () => {
       const next = await applyLedger(command, ledger.revision)
@@ -530,6 +541,9 @@ export function Taskbar(props: Props) {
             <AddWorkspaceIcon />
           </button>
         ) : null}
+        <button type="button" className="dsht3-icon" aria-label={t('session.blank')} onClick={onStartSession}>
+          <NewSessionIcon />
+        </button>
       </div>
     )
   }
@@ -547,7 +561,27 @@ export function Taskbar(props: Props) {
         <label className="dsht3-search">
           <input value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
         </label>
-        {canRaiseDirectoryFlow ? <button type="button" className="dsht3-add" onClick={() => setFlowOpen(true)}>{t('workspace.add')}</button> : null}
+        {showWorkspaceFilter ? (
+          <select
+            className="dsht3-filter"
+            aria-label={t('filter.aria')}
+            value={filterId ?? ''}
+            onChange={(event) => setWorkspaceFilter(event.target.value === '' ? undefined : event.target.value)}
+          >
+            <option value="">{t('filter.all')}</option>
+            {workspaces.items.map((workspace) => (
+              <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.title}</option>
+            ))}
+          </select>
+        ) : null}
+        {canRaiseDirectoryFlow ? (
+          <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => setFlowOpen(true)}>
+            <AddWorkspaceIcon />
+          </button>
+        ) : null}
+        <button type="button" className="dsht3-icon" aria-label={t('session.blank')} onClick={onStartSession}>
+          <NewSessionIcon />
+        </button>
         {directoryFlow}
       </div>
       <div className="dsht3-list">

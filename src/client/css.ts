@@ -9,11 +9,10 @@ export function ensureTaskbarStyles(): void {
 .dsht3-rail { padding:8px 0; display:flex; flex-direction:column; align-items:center; gap:8px; }
 .dsht3-icon { cursor:pointer; width:28px; height:28px; color:var(--dsw-alias-label-secondary); background:transparent; border:none; border-radius:50%; flex:none; justify-content:center; align-items:center; padding:0; display:inline-flex; }
 .dsht3-icon:hover { background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); }
-.dsht3-head { flex:none; padding:4px 8px 8px; }
-.dsht3-search { height:34px; display:flex; align-items:center; padding:0 10px; border-radius:8px; background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-tertiary); }
+.dsht3-head { flex:none; min-width:0; display:flex; align-items:center; gap:4px; padding:4px 8px 8px; }
+.dsht3-search { flex:1; min-width:0; height:32px; display:flex; align-items:center; padding:0 10px; border-radius:8px; background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-tertiary); }
 .dsht3-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--dsw-alias-label-primary); font:inherit; }
-.dsht3-add { width:100%; height:32px; margin-top:8px; border:0; border-radius:8px; background:transparent; color:var(--dsw-alias-label-secondary); cursor:pointer; }
-.dsht3-add:hover { background:var(--dsw-specific-sidebar-nav-item-hover); color:var(--dsw-alias-label-primary); }
+.dsht3-filter { flex:none; max-width:7.5rem; height:28px; border:0; border-radius:8px; background:var(--dsw-alias-bg-module-platform); color:var(--dsw-alias-label-secondary); font:var(--dsw-font-xxs-12); padding:0 6px; }
 .dsht3-list { min-height:0; flex:1; overflow:auto; padding:4px 6px 12px; }
 .dsht3-shelf { margin:2px 0 8px; }
 .dsht3-block { margin:2px 0 8px; }

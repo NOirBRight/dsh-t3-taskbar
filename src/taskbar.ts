@@ -33,6 +33,8 @@ export interface ProjectInput {
   ledger?: Ledger
   drafts?: Readonly<Record<string, string>>
   now?: number
+  /** Browser-local Workspace id. When set, Sessions outside that Workspace are omitted. Not a ledger field. */
+  workspaceFilter?: string
 }
 
 export interface WorkspaceIdentity {
@@ -313,6 +315,9 @@ export function project(input: ProjectInput): ViewModel {
   const listed = input.sessions.filter((session) => {
     if (session.origin === 'subagent') return false
     if (archived.has(session.id)) return false
+    if (input.workspaceFilter !== undefined && workspaceOf(session, input.workspaces)?.id !== input.workspaceFilter) {
+      return false
+    }
     return true
   })
   const ledger = input.ledger ?? {}

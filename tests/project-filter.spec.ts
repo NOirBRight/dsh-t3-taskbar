@@ -25,6 +25,7 @@ describe('project Workspace filter', () => {
         sessionId: 's1',
         workspaceTitle: 'alpha',
         sessionTitle: 'Fix login',
+        identity: { monogram: 'AA', color: 'orange' },
         selected: false,
       },
     ])

@@ -1,77 +1,20 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace/client'
-import { project, type Card, type Command, type LiveStatus, type Session, type ViewModel } from '../taskbar.ts'
+import { project, type Card, type Command, type LiveStatus, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
+import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { discardDraft, draftsSnapshot, subscribeDrafts } from './drafts.ts'
-import { applyLedger, loadLedger, type HostLedger } from './ledger.ts'
+import { AddWorkspaceIcon, PenIcon, SearchIcon } from './icons.tsx'
+import { applyLedger, loadLedger } from './ledger.ts'
+import { EMPTY_LEDGER } from '../ledger-json.ts'
 import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
+import { formatWake, HOUR_MS, laterToday18, toDatetimeLocal, tomorrow09 } from './snooze-time.ts'
 
 type Props = Omit<WorkspaceBrowserProps, 't'> & { t: (key: TaskbarKey) => string }
-type DropDest = 'pinned' | 'active' | 'settled'
 
 const SEARCH_DEBOUNCE_MS = 250
-const HOUR_MS = 60 * 60 * 1000
 const NOW_TICK_MS = 1000
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-function toDatetimeLocal(ms: number): string {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-}
-
-function laterToday18(now: number): number | undefined {
-  const d = new Date(now)
-  d.setHours(18, 0, 0, 0)
-  const until = d.getTime()
-  return until > now ? until : undefined
-}
-
-function tomorrow09(now: number): number {
-  const d = new Date(now)
-  d.setDate(d.getDate() + 1)
-  d.setHours(9, 0, 0, 0)
-  return d.getTime()
-}
-
-function formatWake(until: number): string {
-  return new Date(until).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M11 11l3.2 3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function AddWorkspaceIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3 4.5h7.5a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 10.5 13.5h-7A1.5 1.5 0 0 1 2 12V6a1.5 1.5 0 0 1 1.5-1.5Z" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M5 4.5V3.75A1.75 1.75 0 0 1 6.75 2h2.5A1.75 1.75 0 0 1 11 3.75V4.5" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M8 7.25v4M6 9.25h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function PenIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    </svg>
-  )
-}
 
 function lineOne(workspaceTitle: string, liveStatus: LiveStatus | undefined, t: Props['t']): string {
   const live = liveStatus === undefined ? '' : t(`live.${liveStatus}`)
@@ -107,13 +50,6 @@ function shelfCards(view: ViewModel): Card[] {
   return [...view.shelves.pinned, ...view.shelves.active, ...view.shelves.snoozed, ...view.shelves.settled]
 }
 
-function liveOf(session: { pendingInteraction?: Session['pendingInteraction'] | undefined; running: boolean; completed?: boolean | undefined }): LiveStatus | undefined {
-  if (session.pendingInteraction) return 'waiting-for-me'
-  if (session.running) return 'running'
-  if (session.completed) return 'done-unread'
-  return undefined
-}
-
 export function Taskbar(props: Props) {
   const {
     wide,
@@ -127,6 +63,7 @@ export function Taskbar(props: Props) {
     createWorkspace,
     searchSessions,
     useDirectoryFlow,
+    renameWorkspace,
     renderSlot,
     t,
   } = props
@@ -134,7 +71,7 @@ export function Taskbar(props: Props) {
   const list = useSessions((state) => state)
   const workspaces = useWorkspaces((state) => state)
   const directoryFlowAvailable = useDirectoryFlow((occupied) => occupied)
-  const [ledger, setLedger] = useState<HostLedger>({ revision: 0, records: {} })
+  const [ledger, setLedger] = useState(EMPTY_LEDGER)
   const drafts = useSyncExternalStore(subscribeDrafts, () => draftsSnapshot(list.ids))
   const [query, setQuery] = useState('')
   const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
@@ -147,55 +84,66 @@ export function Taskbar(props: Props) {
   const [flowOpen, setFlowOpen] = useState(false)
   const [flowBusy, setFlowBusy] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
-  const [dropHint, setDropHint] = useState<{ dest: DropDest; index: number } | null>(null)
+  const [dropHint, setDropHint] = useState<DropHint | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), NOW_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
 
-  const livingKey = useMemo(
-    () => list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id)).join('\0'),
-    [list.ids, workspaces.archivedSessionIds],
-  )
+  const livingIds = list.ids.filter((id) => !workspaces.archivedSessionIds.includes(id))
+  const livingIdsKey = livingIds.join('\0')
 
   useEffect(() => {
     if (list.phase !== 'ready') return
     let cancelled = false
-    const livingIds = livingKey === '' ? [] : livingKey.split('\0')
+    const ids = livingIdsKey === '' ? [] : livingIdsKey.split('\0')
     void loadLedger().then(async (loaded) => {
       if (cancelled) return
-      const next = await applyLedger({ type: 'Gc', livingIds }, loaded.revision)
+      const next = await applyLedger({ type: 'Gc', livingIds: ids }, loaded.revision)
       if (cancelled) return
       setLedger(next ?? loaded)
     })
     return () => { cancelled = true }
-  }, [livingKey, list.phase])
+  }, [livingIdsKey, list.phase])
 
-  const view = useMemo(() => project({
+  const projectWorkspaces = workspaces.items.map((workspace) => ({
+    id: workspace.workspaceId,
+    title: workspace.title,
+    path: workspace.path,
+    sessionIds: workspace.sessionIds,
+  }))
+
+  const projectSessions = (sessions: Session[]) => project({
     ...(list.current !== undefined ? { current: list.current } : {}),
     archivedSessionIds: workspaces.archivedSessionIds,
     ledger: ledger.records,
     drafts,
     now,
-    sessions: list.ids.flatMap((id) => {
+    sessions,
+    workspaces: projectWorkspaces,
+  })
+
+  const view = useMemo(
+    () => projectSessions(list.ids.flatMap((id) => {
       const session = list.byId[id]
       if (session === undefined) return []
       return [toSession(id, session)]
-    }),
-    workspaces: workspaces.items.map((workspace) => ({
-      id: workspace.workspaceId,
-      title: workspace.title,
-      path: workspace.path,
-      sessionIds: workspace.sessionIds,
     })),
-  }), [list, workspaces, ledger.records, drafts, now])
+    [list, workspaces, ledger.records, drafts, now],
+  )
 
   const cards = shelfCards(view)
   const draftIds = useMemo(() => new Set(view.unsentDrafts.map((card) => card.sessionId)), [view.unsentDrafts])
   const pinnedIds = useMemo(() => new Set(view.shelves.pinned.map((card) => card.sessionId)), [view.shelves.pinned])
   const snoozedIds = useMemo(() => new Set(view.shelves.snoozed.map((card) => card.sessionId)), [view.shelves.snoozed])
   const settledIds = useMemo(() => new Set(view.shelves.settled.map((card) => card.sessionId)), [view.shelves.settled])
+  const shelfOf = (sessionId: string): Shelf => {
+    if (pinnedIds.has(sessionId)) return 'pinned'
+    if (snoozedIds.has(sessionId)) return 'snoozed'
+    if (settledIds.has(sessionId)) return 'settled'
+    return 'active'
+  }
   const searching = query.trim() !== ''
 
   useEffect(() => {
@@ -226,39 +174,15 @@ export function Taskbar(props: Props) {
     return () => document.removeEventListener('click', close)
   }, [])
 
-  const workspaceTitleOf = (sessionId: string, cwd: string | undefined): string => {
-    const byAccount = workspaces.items.find((workspace) => workspace.sessionIds.includes(sessionId as never))
-    if (byAccount) return byAccount.title
-    if (cwd === undefined) return ''
-    return workspaces.items.find((workspace) => cwd === workspace.path || cwd.startsWith(`${workspace.path}/`))?.title ?? ''
-  }
-
-  const extraCard = (sessionId: string, snippet: string): Card | undefined => {
+  const cardFromHostHit = (sessionId: string, snippet: string): Card | undefined => {
     if (workspaces.archivedSessionIds.includes(sessionId as never)) return undefined
     const session = list.byId[sessionId as never]
     if (session === undefined) {
       return { sessionId, workspaceTitle: '', sessionTitle: snippet, selected: list.current === sessionId }
     }
     if (session.origin === 'subagent') return undefined
-    const liveStatus = liveOf(session)
-    if (session.blank) {
-      const preview = drafts[sessionId]
-      if (preview === undefined || preview === '') return undefined
-      return {
-        sessionId,
-        workspaceTitle: workspaceTitleOf(sessionId, session.cwd),
-        sessionTitle: preview,
-        selected: list.current === sessionId,
-      }
-    }
-    return {
-      sessionId,
-      workspaceTitle: workspaceTitleOf(sessionId, session.cwd),
-      sessionTitle: session.displayTitle,
-      ...(liveStatus !== undefined ? { liveStatus } : {}),
-      selected: list.current === sessionId,
-      ...(drafts[sessionId] ? { unsentDraft: true as const } : {}),
-    }
+    const extra = projectSessions([toSession(sessionId, session)])
+    return extra.unsentDrafts[0] ?? shelfCards(extra)[0]
   }
 
   const results = (() => {
@@ -275,7 +199,7 @@ export function Taskbar(props: Props) {
     const seen = new Set<string>()
     const push = (id: string, snippet = '') => {
       if (seen.has(id)) return
-      const card = known.get(id) ?? extraCard(id, snippet)
+      const card = known.get(id) ?? cardFromHostHit(id, snippet)
       if (card === undefined) return
       seen.add(id)
       out.push(card)
@@ -320,18 +244,21 @@ export function Taskbar(props: Props) {
   const started = (id: string) => list.byId[id as never]?.blank !== true
   const dragging = dragId !== null
 
-  const dropCommand = (sessionId: string, dest: DropDest, index: number): Command => {
-    if (dest === 'settled') return { type: 'Drop', sessionId, dest, index, at: Date.now() }
-    return { type: 'Drop', sessionId, dest, index }
-  }
-
-  const dropVerbOf = (sessionId: string, dest: DropDest): TaskbarKey | undefined => {
-    if (dest === 'pinned') return 'pin'
-    if (dest === 'settled') return 'settle'
-    if (pinnedIds.has(sessionId)) return 'unpin'
-    if (snoozedIds.has(sessionId)) return 'wake'
-    if (settledIds.has(sessionId)) return 'unsettle'
-    return undefined
+  const commandForDrop = (sessionId: string, dest: DropDest, index: number): Command | undefined => {
+    const shelfIds = dest === 'pinned'
+      ? view.shelves.pinned.map((card) => card.sessionId)
+      : dest === 'active'
+        ? view.shelves.active.map((card) => card.sessionId)
+        : view.shelves.settled.map((card) => card.sessionId)
+    return dropCommand({
+      sessionId,
+      dest,
+      index,
+      shelfIds,
+      snoozed: snoozedIds.has(sessionId),
+      at: Date.now(),
+      now,
+    })
   }
 
   const bindDest = (dest: DropDest, index: number) => ({
@@ -348,11 +275,12 @@ export function Taskbar(props: Props) {
       setDragId(null)
       setDropHint(null)
       if (!source) return
-      send(dropCommand(source, dest, index))
+      const command = commandForDrop(source, dest, index)
+      if (command !== undefined) send(command)
     },
   })
 
-  const bindDrag = (sessionId: string, drop?: { dest: DropDest; index: number }) => ({
+  const bindDrag = (sessionId: string, drop?: DropHint) => ({
     draggable: true as const,
     onDragStart: (event: ReactDragEvent<HTMLElement>) => {
       event.dataTransfer.setData('text/plain', sessionId)
@@ -368,7 +296,7 @@ export function Taskbar(props: Props) {
 
   const dragVerb = (sessionId: string) => {
     if (dragId !== sessionId || dropHint === null) return null
-    const key = dropVerbOf(sessionId, dropHint.dest)
+    const key = dropVerbOf(dropHint.dest, shelfOf(sessionId))
     if (key === undefined) return null
     return <span className="dsht3-verb">{t(key)}</span>
   }
@@ -400,7 +328,7 @@ export function Taskbar(props: Props) {
   )
 
   const renderSnoozed = (card: Card) => {
-    const until = ledger.records[card.sessionId]?.snoozedUntil
+    const until = card.wakeAt
     return (
       <div
         key={card.sessionId}
@@ -420,9 +348,6 @@ export function Taskbar(props: Props) {
             {until === undefined ? '' : `${t('snooze.until')} ${formatWake(until)}`}
           </span>
         </div>
-        <button type="button" className="dsht3-wake" onClick={() => send({ type: 'Wake', sessionId: card.sessionId })}>
-          {t('wake')}
-        </button>
         <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
         {dragVerb(card.sessionId)}
       </div>
@@ -457,14 +382,15 @@ export function Taskbar(props: Props) {
     </div>
   )
 
-  const renderCard = (card: Card, drop?: { dest: DropDest; index: number }) => {
+  const renderCard = (card: Card, drop?: DropHint) => {
     if (draftIds.has(card.sessionId) || (!started(card.sessionId) && drafts[card.sessionId])) {
       return renderDraft(card)
     }
-    if (snoozedIds.has(card.sessionId)) return renderSnoozed(card)
-    if (settledIds.has(card.sessionId) || card.slim === true) return renderSettled(card, drop?.index)
+    if (!searching && snoozedIds.has(card.sessionId)) return renderSnoozed(card)
+    if (!searching && (settledIds.has(card.sessionId) || card.slim === true)) return renderSettled(card, drop?.index)
     const pinned = pinnedIds.has(card.sessionId)
-    const pinKey = pinned ? 'unpin' : 'pin'
+    const pinVerb = pinned ? 'unpin' : 'pin'
+    const canSettle = started(card.sessionId) && !snoozedIds.has(card.sessionId) && !settledIds.has(card.sessionId)
     return (
       <div
         key={card.sessionId}
@@ -492,11 +418,21 @@ export function Taskbar(props: Props) {
             <button
               type="button"
               className="dsht3-pin"
-              aria-label={t(pinKey)}
+              aria-label={t(pinVerb)}
               onClick={() => onTogglePin(card.sessionId, pinned)}
             >
-              {t(pinKey)}
+              {t(pinVerb)}
             </button>
+            {canSettle ? (
+              <button
+                type="button"
+                className="dsht3-act"
+                aria-label={t('settle')}
+                onClick={() => send({ type: 'Settle', sessionId: card.sessionId, at: Date.now() })}
+              >
+                {t('settle')}
+              </button>
+            ) : null}
             <button type="button" className="dsht3-more" onClick={(event) => openMenu(event, card.sessionId)}>···</button>
           </>
         ) : null}
@@ -557,7 +493,7 @@ export function Taskbar(props: Props) {
           <>
             {/* unsent-draft */}
             {unsentDrafts.length === 0 ? null : (
-              <section className="dsht3-shelf">
+              <section className="dsht3-block">
                 <div className="dsht3-shead">{t('draft.unsent')}</div>
                 {unsentDrafts.map(renderDraft)}
               </section>
@@ -645,7 +581,20 @@ export function Taskbar(props: Props) {
                   if (title) void renameSession(menu.id as never, title)
                   setMenu(null)
                 }}>{t('menu.rename')}</button>
+                <button type="button" onClick={() => {
+                  const workspace = workspaces.items.find((item) => item.sessionIds.includes(menu.id as never))
+                  if (workspace === undefined) {
+                    setMenu(null)
+                    return
+                  }
+                  const title = window.prompt(t('menu.workspace'))
+                  if (title) void renameWorkspace(workspace.workspaceId as never, title)
+                  setMenu(null)
+                }}>{t('menu.workspace')}</button>
                 <button type="button" onClick={() => { forkSession(menu.id as never); setMenu(null) }}>{t('menu.fork')}</button>
+                {snoozedIds.has(menu.id) ? (
+                  <button type="button" onClick={() => { send({ type: 'Wake', sessionId: menu.id }); setMenu(null) }}>{t('wake')}</button>
+                ) : null}
                 {settledIds.has(menu.id) ? null : (
                   <button type="button" onClick={() => { onTogglePin(menu.id, pinnedIds.has(menu.id)); setMenu(null) }}>
                     {t(pinnedIds.has(menu.id) ? 'unpin' : 'pin')}

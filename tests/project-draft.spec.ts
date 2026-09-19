@@ -1,23 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { project, type Session, type Workspace } from '../src/taskbar.ts'
-
-const session = (partial: Partial<Session> & Pick<Session, 'id' | 'title'>): Session => ({
-  updatedAt: 1,
-  running: false,
-  blank: false,
-  ...partial,
-})
+import { project, type Workspace } from '../src/taskbar.ts'
 
 const workspaces: readonly Workspace[] = [
   { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 'drafty', 'unused', 'blank'] },
 ]
 
-describe('project drafts', () => {
+describe('project Unsent Draft', () => {
   it('places a non-current blank with a non-empty draft in the Unsent Draft block, not on a Shelf', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'drafty', title: 'New', blank: true }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'drafty', title: 'New', blank: true, updatedAt: 1, running: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -40,8 +33,8 @@ describe('project drafts', () => {
   it('hides a non-current blank with an empty draft', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'unused', title: 'New', blank: true }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'unused', title: 'New', blank: true, updatedAt: 1, running: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -54,8 +47,8 @@ describe('project drafts', () => {
   it('keeps a current blank without draft on Active and out of the Unsent Draft block', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'blank', title: 'New', blank: true }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'blank', title: 'New', blank: true, updatedAt: 1, running: false },
       ],
       workspaces,
       current: 'blank',
@@ -68,8 +61,8 @@ describe('project drafts', () => {
   it('places a current blank with draft in the Unsent Draft block, not on a Shelf', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'blank', title: 'New', blank: true }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'blank', title: 'New', blank: true, updatedAt: 1, running: false },
       ],
       workspaces,
       current: 'blank',
@@ -90,9 +83,9 @@ describe('project drafts', () => {
     expect(view.shelves.settled).toEqual([])
   })
 
-  it('keeps a started Session with draft on Active and sets the pen flag', () => {
+  it('keeps a started Session with Unsent Draft on Active and marks the Card', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       drafts: { s1: 'follow up in the composer' },

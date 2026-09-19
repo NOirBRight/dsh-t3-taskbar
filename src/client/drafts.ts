@@ -25,15 +25,35 @@ export function subscribeDrafts(listener: () => void): () => void {
   }
 }
 
+function attachmentCount(value: Record<string, unknown>): number {
+  for (const key of ['imageIds', 'images', 'attachments'] as const) {
+    const listed = value[key]
+    if (Array.isArray(listed) && listed.length > 0) return listed.length
+  }
+  return 0
+}
+
+function persistRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
+/** Observable composer preview. Empty means no Unsent Draft. */
+export function previewFromChatPersist(value: unknown): string {
+  const record = persistRecord(value)
+  if (record === undefined) return ''
+  const draft = record.draft
+  if (typeof draft === 'string' && draft !== '') return draft
+  const count = attachmentCount(record)
+  return count === 0 ? '' : `📎 ${String(count)}`
+}
+
 export function readDraft(sessionId: string): string {
   if (typeof localStorage === 'undefined') return ''
   try {
     const raw = localStorage.getItem(key(sessionId))
     if (raw === null) return ''
-    const parsed: unknown = JSON.parse(raw)
-    if (parsed === null || typeof parsed !== 'object') return ''
-    const draft = (parsed as { draft?: unknown }).draft
-    return typeof draft === 'string' ? draft : ''
+    return previewFromChatPersist(JSON.parse(raw))
   } catch {
     return ''
   }
@@ -69,7 +89,7 @@ export function discardDraft(sessionId: string): void {
     }
     const parsed: unknown = JSON.parse(raw)
     if (parsed !== null && typeof parsed === 'object') {
-      localStorage.setItem(persistKey, JSON.stringify({ ...parsed, draft: '' }))
+      localStorage.setItem(persistKey, JSON.stringify({ ...parsed, draft: '', imageIds: [], images: [], attachments: [] }))
     } else {
       localStorage.removeItem(persistKey)
     }

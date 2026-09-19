@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { project, type Session, type Workspace } from '../src/taskbar.ts'
-
-const session = (partial: Partial<Session> & Pick<Session, 'id' | 'title'>): Session => ({
-  updatedAt: 1,
-  running: false,
-  blank: false,
-  ...partial,
-})
+import { project, type Workspace } from '../src/taskbar.ts'
 
 const workspaces: readonly Workspace[] = [
   { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 's2'] },
@@ -15,7 +8,7 @@ const workspaces: readonly Workspace[] = [
 describe('project Settle', () => {
   it('puts a Settled Session on Settled as a slim row, not Active', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { settledAt: 50 } },
@@ -36,7 +29,7 @@ describe('project Settle', () => {
 
   it('Settle outranks Pin so a Session with both is only on Settled', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { pin: 0, settledAt: 50 } },
@@ -50,8 +43,8 @@ describe('project Settle', () => {
   it('never places one Session on two Shelves', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -66,8 +59,8 @@ describe('project Settle', () => {
   it('Unsettle returns the Session to Active at the top', () => {
     const view = project({
       sessions: [
-        session({ id: 's2', title: 'Other' }),
-        session({ id: 's1', title: 'Fix login' }),
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -78,11 +71,11 @@ describe('project Settle', () => {
     expect(view.shelves.pinned).toEqual([])
   })
 
-  it('orders Settled by settledAt descending', () => {
+  it('orders Settled newest first', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -91,11 +84,11 @@ describe('project Settle', () => {
     expect(view.shelves.settled.map((card) => card.sessionId)).toEqual(['s2', 's1'])
   })
 
-  it('omits an Archived Session from Settled even when the ledger still has settledAt', () => {
+  it('omits an Archived Session from Settled even when it had been Settled', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'arch', title: 'Old work' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'arch', title: 'Old work', updatedAt: 1, running: false, blank: false },
       ],
       workspaces: [
         { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 'arch'] },
@@ -111,7 +104,7 @@ describe('project Settle', () => {
 
   it('settling does not remove the Session id from the Taskbar', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { settledAt: 50 } },

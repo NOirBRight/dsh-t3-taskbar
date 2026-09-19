@@ -1,21 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { apply, project, type Session, type Workspace } from '../src/taskbar.ts'
-
-const session = (partial: Partial<Session> & Pick<Session, 'id' | 'title'>): Session => ({
-  updatedAt: 1,
-  running: false,
-  blank: false,
-  ...partial,
-})
+import { project, type Workspace } from '../src/taskbar.ts'
 
 const workspaces: readonly Workspace[] = [
   { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 's2'] },
 ]
 
 describe('project snooze', () => {
-  it('places a Session with snoozedUntil after now on Snoozed only, slim', () => {
+  it('places a Session still waiting to wake on Snoozed only, slim', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { snoozedUntil: 5000 } },
@@ -28,6 +21,7 @@ describe('project snooze', () => {
         sessionTitle: 'Fix login',
         selected: false,
         slim: true,
+        wakeAt: 5000,
       },
     ])
     expect(view.shelves.active).toEqual([])
@@ -35,9 +29,9 @@ describe('project snooze', () => {
     expect(view.shelves.settled).toEqual([])
   })
 
-  it('places a Session on Active when snoozedUntil is not after now', () => {
+  it('places a Session on Active when the wake time is not after now', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { snoozedUntil: 1000 } },
@@ -54,9 +48,9 @@ describe('project snooze', () => {
     expect(view.shelves.snoozed).toEqual([])
   })
 
-  it('keeps a snoozed row only on Snoozed even if pin and settle keys remain', () => {
+  it('Snooze outranks Pin and Settle so the Session is only on Snoozed', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { pin: 0, settledAt: 50, snoozedUntil: 5000 } },
@@ -68,11 +62,11 @@ describe('project snooze', () => {
     expect(view.shelves.settled).toEqual([])
   })
 
-  it('sorts Snoozed by snoozedUntil ascending', () => {
+  it('sorts Snoozed by soonest wake first', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -83,15 +77,11 @@ describe('project snooze', () => {
   })
 
   it('Pin of a snoozed Session lands on Pinned only', () => {
-    const ledger = apply(
-      { s1: { snoozedUntil: 5000 } },
-      { type: 'Pin', sessionId: 's1' },
-    )
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
-      ledger,
+      ledger: { s1: { pin: 0 } },
       now: 1000,
     })
     expect(view.shelves.pinned.map((card) => card.sessionId)).toEqual(['s1'])
@@ -100,19 +90,14 @@ describe('project snooze', () => {
   })
 
   it('Wake of a snoozed Session lands on Active at the top, not Pinned', () => {
-    const snoozed = apply({ s1: { pin: 0 } }, { type: 'Snooze', sessionId: 's1', until: 5000 })
-    const ledger = apply(
-      { ...snoozed, s2: { active: 0 } },
-      { type: 'Wake', sessionId: 's1' },
-    )
     const view = project({
       sessions: [
-        session({ id: 's2', title: 'Other' }),
-        session({ id: 's1', title: 'Fix login' }),
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
-      ledger,
+      ledger: { s1: { active: -1 }, s2: { active: 0 } },
       now: 1000,
     })
     expect(view.shelves.active.map((card) => card.sessionId)).toEqual(['s1', 's2'])

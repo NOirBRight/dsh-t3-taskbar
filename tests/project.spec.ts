@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { project, type Session, type Workspace } from '../src/taskbar.ts'
-
-const session = (partial: Partial<Session> & Pick<Session, 'id' | 'title'>): Session => ({
-  updatedAt: 1,
-  running: false,
-  blank: false,
-  ...partial,
-})
+import { project, type Workspace } from '../src/taskbar.ts'
 
 const workspaces: readonly Workspace[] = [
   { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1'] },
@@ -15,7 +8,7 @@ const workspaces: readonly Workspace[] = [
 describe('project', () => {
   it('places a started Session on Active with Workspace on the Card, not as a heading', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
     })
@@ -32,9 +25,9 @@ describe('project', () => {
     expect(view.shelves.settled).toEqual([])
   })
 
-  it('marks pendingInteraction as waiting-for-me Live status on Active, not another Shelf', () => {
+  it('marks waiting-for-me Live status on Active, not another Shelf', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login', pendingInteraction: 'approval' })],
+      sessions: [{ id: 's1', title: 'Fix login', pendingInteraction: 'approval', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
     })
@@ -54,7 +47,7 @@ describe('project', () => {
 
   it('marks running as running Live status on Active', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login', running: true })],
+      sessions: [{ id: 's1', title: 'Fix login', running: true, updatedAt: 1, blank: false }],
       workspaces,
       archivedSessionIds: [],
     })
@@ -66,7 +59,7 @@ describe('project', () => {
 
   it('marks completed as done-unread Live status on Active', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login', completed: true })],
+      sessions: [{ id: 's1', title: 'Fix login', completed: true, updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
     })
@@ -78,12 +71,14 @@ describe('project', () => {
 
   it('lets waiting-for-me win over running when both could apply', () => {
     const view = project({
-      sessions: [session({
+      sessions: [{
         id: 's1',
         title: 'Fix login',
         running: true,
         pendingInteraction: 'question',
-      })],
+        updatedAt: 1,
+        blank: false,
+      }],
       workspaces,
       archivedSessionIds: [],
     })
@@ -97,8 +92,8 @@ describe('project', () => {
   it('omits a subagent-origin Session from every Shelf', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'kid', title: 'child', origin: 'subagent' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'kid', title: 'child', origin: 'subagent', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -112,8 +107,8 @@ describe('project', () => {
   it('omits Archived Session ids from every Shelf', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'arch', title: 'Old work' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'arch', title: 'Old work', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: ['arch'],
@@ -127,9 +122,9 @@ describe('project', () => {
   it('hides a non-current empty blank and keeps the current blank on Active', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 'unused', title: 'New', blank: true }),
-        session({ id: 'blank', title: 'New', blank: true }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 'unused', title: 'New', blank: true, updatedAt: 1, running: false },
+        { id: 'blank', title: 'New', blank: true, updatedAt: 1, running: false },
       ],
       workspaces,
       current: 'blank',
@@ -144,8 +139,8 @@ describe('project', () => {
   it('marks the current Session Card as selected', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other', cwd: '/apps/beta' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', cwd: '/apps/beta', updatedAt: 1, running: false, blank: false },
       ],
       workspaces: [
         ...workspaces,
@@ -170,19 +165,17 @@ describe('project', () => {
     ])
   })
 
-  it('puts Workspace title on the Card from the Session cwd when membership is missing', () => {
+  it('orders Active by recency, newest first', () => {
     const view = project({
-      sessions: [session({ id: 's9', title: 'Solo', cwd: '/apps/alpha' })],
-      workspaces,
+      sessions: [
+        { id: 's1', title: 'Older', updatedAt: 10, running: false, blank: false },
+        { id: 's2', title: 'Newer', updatedAt: 20, cwd: '/apps/alpha', running: false, blank: false },
+      ],
+      workspaces: [
+        { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 's2'] },
+      ],
       archivedSessionIds: [],
     })
-    expect(view.shelves.active).toEqual([
-      {
-        sessionId: 's9',
-        workspaceTitle: 'alpha',
-        sessionTitle: 'Solo',
-        selected: false,
-      },
-    ])
+    expect(view.shelves.active.map((card) => card.sessionId)).toEqual(['s2', 's1'])
   })
 })

@@ -1,10 +1,7 @@
 import { LEDGER_APPLY, LEDGER_GET } from '../contract.ts'
+import { isRecord } from '../ledger-json.ts'
 import { apply, type Command } from '../taskbar.ts'
 import { readLedgerFile, writeLedgerFile } from './ledger-file.ts'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function fail(message: string): { ok: false; error: { code: 'internal'; message: string; details: Record<string, never> } } {
   return { ok: false, error: { code: 'internal', message, details: {} } }
@@ -41,10 +38,23 @@ function decodeCommand(value: unknown): Command | undefined {
     const sessionId = sessionIdOf(value)
     if (sessionId === undefined || typeof value.index !== 'number') return undefined
     if (value.dest !== 'pinned' && value.dest !== 'active' && value.dest !== 'settled') return undefined
-    if (typeof value.at === 'number') {
-      return { type: 'Drop', sessionId, dest: value.dest, index: value.index, at: value.at }
+    let shelfIds: string[] | undefined
+    if (Array.isArray(value.shelfIds)) {
+      shelfIds = []
+      for (const id of value.shelfIds) {
+        if (typeof id !== 'string') return undefined
+        shelfIds.push(id)
+      }
     }
-    return { type: 'Drop', sessionId, dest: value.dest, index: value.index }
+    return {
+      type: 'Drop',
+      sessionId,
+      dest: value.dest,
+      index: value.index,
+      ...(typeof value.at === 'number' ? { at: value.at } : {}),
+      ...(typeof value.now === 'number' ? { now: value.now } : {}),
+      ...(shelfIds === undefined ? {} : { shelfIds }),
+    }
   }
   if (value.type !== 'Gc' || !Array.isArray(value.livingIds)) return undefined
   const livingIds: string[] = []

@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { project, type Session, type Workspace } from '../src/taskbar.ts'
-
-const session = (partial: Partial<Session> & Pick<Session, 'id' | 'title'>): Session => ({
-  updatedAt: 1,
-  running: false,
-  blank: false,
-  ...partial,
-})
+import { project, type Workspace } from '../src/taskbar.ts'
 
 const workspaces: readonly Workspace[] = [
   { id: 'w1', title: 'alpha', path: '/apps/alpha', sessionIds: ['s1', 's2'] },
@@ -15,7 +8,7 @@ const workspaces: readonly Workspace[] = [
 describe('project with ledger', () => {
   it('puts a Pinned Session on Pinned, not Active', () => {
     const view = project({
-      sessions: [session({ id: 's1', title: 'Fix login' })],
+      sessions: [{ id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false }],
       workspaces,
       archivedSessionIds: [],
       ledger: { s1: { pin: 0 } },
@@ -36,8 +29,8 @@ describe('project with ledger', () => {
   it('never places one Session on two Shelves', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],
@@ -49,11 +42,11 @@ describe('project with ledger', () => {
     expect(view.shelves.settled).toEqual([])
   })
 
-  it('orders Pinned by pin key, lowest first', () => {
+  it('orders Pinned with the newest Pin first', () => {
     const view = project({
       sessions: [
-        session({ id: 's1', title: 'Fix login' }),
-        session({ id: 's2', title: 'Other' }),
+        { id: 's1', title: 'Fix login', updatedAt: 1, running: false, blank: false },
+        { id: 's2', title: 'Other', updatedAt: 1, running: false, blank: false },
       ],
       workspaces,
       archivedSessionIds: [],

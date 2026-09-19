@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { apply } from '../src/taskbar.ts'
 
 describe('apply', () => {
-  it('Pin writes a pin key for the Session', () => {
+  it('Pin parks the Session at the top of Pinned', () => {
     expect(apply({}, { type: 'Pin', sessionId: 's1' })).toEqual({ s1: { pin: 0 } })
   })
 
@@ -13,11 +13,11 @@ describe('apply', () => {
     })
   })
 
-  it('Unpin clears the pin key and drops an empty record', () => {
+  it('Unpin returns the Session to Active', () => {
     expect(apply({ s1: { pin: 0 } }, { type: 'Unpin', sessionId: 's1' })).toEqual({})
   })
 
-  it('Unpin clears only the pin key so a future Snooze can share that helper', () => {
+  it('Unpin of a Snoozed Session leaves the wake time in place', () => {
     expect(apply(
       { s1: { pin: 0, snoozedUntil: 99 } },
       { type: 'Unpin', sessionId: 's1' },

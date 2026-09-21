@@ -53,6 +53,13 @@ describe('apply Snooze and Wake', () => {
     })
   })
 
+  it('a conflicted Wake from Settled records a manual Active hold', () => {
+    expect(apply(
+      { s1: { settledAt: 50 } },
+      { type: 'Wake', sessionId: 's1', at: 100 },
+    )).toEqual({ s1: { active: 0, manualActiveAt: 100 } })
+  })
+
   it('Wake after Snooze lands on Active, not Pinned', () => {
     const snoozed = apply({ s1: { pin: 0 } }, { type: 'Snooze', sessionId: 's1', until: 5000 })
     expect(snoozed).toEqual({ s1: { snoozedUntil: 5000 } })

@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
 import { isRecord } from '../ledger-json.ts'
 import type { GitMarks } from '../taskbar.ts'
+import type { PullRequestFact } from '../auto-settle.ts'
 
 const TTL_MS = 30_000
 const TIMEOUT_MS = 8_000
@@ -110,6 +111,35 @@ async function probePathCached(path: string, now: number): Promise<GitMarks> {
   })
   inflight.set(path, work)
   return work
+}
+
+async function probePullRequestUncached(path: string): Promise<PullRequestFact | undefined> {
+  if (await run('git', ['rev-parse', '--is-inside-work-tree'], path) !== 'true') return undefined
+  if (!await ghAuthed(path)) return undefined
+  const [branch, head, raw] = await Promise.all([
+    run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], path),
+    run('git', ['rev-parse', 'HEAD'], path),
+    run('gh', ['pr', 'view', '--json', 'number,state,mergedAt,closedAt,headRefName,headRefOid'], path),
+  ])
+  if (branch === undefined || branch === 'HEAD' || head === undefined || raw === undefined) return undefined
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (!isRecord(value) || !Number.isInteger(value.number) || (value.number as number) <= 0) return undefined
+    if (value.headRefName !== branch || value.headRefOid !== head) return undefined
+    if (value.state === 'OPEN') return { number: value.number as number, state: 'open' }
+    const date = value.state === 'MERGED' ? value.mergedAt : value.state === 'CLOSED' ? value.closedAt : undefined
+    if (typeof date !== 'string') return undefined
+    const terminalAt = Date.parse(date)
+    if (!Number.isFinite(terminalAt)) return undefined
+    return { number: value.number as number, state: value.state === 'MERGED' ? 'merged' : 'closed', terminalAt }
+  } catch {
+    return undefined
+  }
+}
+
+/** Trusted branch-local PR fact. Unknown/auth/network/mismatch all fail closed. */
+export function probePullRequest(path: string): Promise<PullRequestFact | undefined> {
+  return probePullRequestUncached(path)
 }
 
 export async function probeGitMarks(paths: readonly string[]): Promise<Record<string, GitMarks>> {

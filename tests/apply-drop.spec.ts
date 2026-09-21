@@ -25,7 +25,7 @@ describe('apply Drop', () => {
     expect(apply(
       { s1: { pin: 0 } },
       { type: 'Drop', sessionId: 's1', dest: 'settled', index: 0, at: 50 },
-    )).toEqual({ s1: { settledAt: 50 } })
+    )).toEqual({ s1: { settledAt: 50, settledBy: 'manual' } })
   })
 
   it('Drop onto Active from Settled Un-settles', () => {
@@ -33,6 +33,13 @@ describe('apply Drop', () => {
       { s1: { settledAt: 50 } },
       { type: 'Drop', sessionId: 's1', dest: 'active', index: 0 },
     )).toEqual({ s1: { active: 0 } })
+  })
+
+  it('Drop onto Pinned from Settled preserves a manual Active hold', () => {
+    expect(apply(
+      { s1: { settledAt: 50 } },
+      { type: 'Drop', sessionId: 's1', dest: 'pinned', index: 0, at: 100 },
+    )).toEqual({ s1: { pin: 0, manualActiveAt: 100 } })
   })
 
   it('Drop onto Pinned from Snoozed is Wake then Pin', () => {

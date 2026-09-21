@@ -1,6 +1,6 @@
 /** Read/discard DSH composer persist. Does not delete Sessions. */
 
-const PREFIX = 'dsh.conversation.chat.'
+const PREFIX = 'dsh.conversation.'
 
 const listeners = new Set<() => void>()
 
@@ -25,14 +25,6 @@ export function subscribeDrafts(listener: () => void): () => void {
   }
 }
 
-function attachmentCount(value: Record<string, unknown>): number {
-  for (const key of ['imageIds', 'images', 'attachments'] as const) {
-    const listed = value[key]
-    if (Array.isArray(listed) && listed.length > 0) return listed.length
-  }
-  return 0
-}
-
 function persistRecord(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
   return value as Record<string, unknown>
@@ -44,8 +36,7 @@ export function previewFromChatPersist(value: unknown): string {
   if (record === undefined) return ''
   const draft = record.draft
   if (typeof draft === 'string' && draft !== '') return draft
-  const count = attachmentCount(record)
-  return count === 0 ? '' : `📎 ${String(count)}`
+  return ''
 }
 
 export function readDraft(sessionId: string): string {

@@ -18,7 +18,7 @@ export function dropCommand(input: {
   if (dest === 'settled') {
     return { type: 'Drop', sessionId, dest, index, at, now, shelfIds }
   }
-  return { type: 'Drop', sessionId, dest, index, shelfIds }
+  return { type: 'Drop', sessionId, dest, index, shelfIds, ...(dest === 'active' || dest === 'pinned' ? { at } : {}) }
 }
 
 export function dropVerbOf(dest: DropDest, current: Shelf): TaskbarKey | undefined {

@@ -4,7 +4,8 @@ export type Shelf = 'pinned' | 'active' | 'snoozed' | 'settled'
 
 export type LiveStatus = 'waiting-for-me' | 'running' | 'done-unread'
 
-export type PendingKind = 'approval' | 'plan-review' | 'question'
+/** Host UI domains contribute their own pending-interaction kind strings. */
+export type PendingKind = string
 
 export interface Session {
   id: string
@@ -91,17 +92,22 @@ export interface LedgerEntry {
   readonly active?: number
   readonly settledAt?: number
   readonly snoozedUntil?: number
+  readonly settledBy?: 'manual' | 'auto-inactive' | 'auto-pr-merged' | 'auto-pr-closed'
+  readonly settledPr?: number
+  /** Manual return to Active blocks automation until newer real activity exists. */
+  readonly manualActiveAt?: number
 }
 
 export type Ledger = Readonly<Record<string, LedgerEntry>>
 
 export type Command =
-  | { readonly type: 'Pin'; readonly sessionId: string }
+  | { readonly type: 'Pin'; readonly sessionId: string; readonly at?: number }
   | { readonly type: 'Unpin'; readonly sessionId: string }
   | { readonly type: 'Settle'; readonly sessionId: string; readonly at: number }
-  | { readonly type: 'Unsettle'; readonly sessionId: string }
-  | { readonly type: 'Snooze'; readonly sessionId: string; readonly until: number; readonly pendingInteraction?: PendingKind }
-  | { readonly type: 'Wake'; readonly sessionId: string }
+  | { readonly type: 'Unsettle'; readonly sessionId: string; readonly at?: number }
+  | { readonly type: 'AutoSettle'; readonly sessionId: string; readonly at: number; readonly reason: 'inactive' | 'pr-merged' | 'pr-closed'; readonly pr?: number }
+  | { readonly type: 'Snooze'; readonly sessionId: string; readonly until: number; readonly pendingInteraction?: PendingKind; readonly at?: number }
+  | { readonly type: 'Wake'; readonly sessionId: string; readonly at?: number }
   | { readonly type: 'Drop'; readonly sessionId: string; readonly dest: 'pinned' | 'active' | 'settled'; readonly index: number; readonly at?: number; readonly now?: number; readonly shelfIds?: readonly string[] }
   | { readonly type: 'Gc'; readonly livingIds: readonly string[] }
 
@@ -131,11 +137,21 @@ function orderKeyAt(ledger: Ledger, field: 'pin' | 'active', sessionId: string, 
 
 /** Snooze (ticket 04) must clear pin keys the same way — wake is always Active. */
 function withoutPin(entry: LedgerEntry): LedgerEntry | undefined {
-  const next: { active?: number; settledAt?: number; snoozedUntil?: number } = {}
+  const next: { active?: number; settledAt?: number; snoozedUntil?: number; settledBy?: Exclude<LedgerEntry['settledBy'], undefined>; settledPr?: number; manualActiveAt?: number } = {}
   if (entry.active !== undefined) next.active = entry.active
   if (entry.settledAt !== undefined) next.settledAt = entry.settledAt
   if (entry.snoozedUntil !== undefined) next.snoozedUntil = entry.snoozedUntil
+  if (entry.settledBy !== undefined) next.settledBy = entry.settledBy
+  if (entry.settledPr !== undefined) next.settledPr = entry.settledPr
+  if (entry.manualActiveAt !== undefined) next.manualActiveAt = entry.manualActiveAt
   return Object.keys(next).length === 0 ? undefined : next
+}
+
+function onOrderedShelf(entry: LedgerEntry | undefined, field: 'pin' | 'active', order: number): LedgerEntry {
+  return {
+    [field]: order,
+    ...(entry?.manualActiveAt === undefined ? {} : { manualActiveAt: entry.manualActiveAt }),
+  }
 }
 
 function placeOnShelf(
@@ -146,14 +162,15 @@ function placeOnShelf(
   shelfIds: readonly string[] | undefined,
 ): Ledger {
   if (shelfIds === undefined) {
-    return write(ledger, sessionId, { [field]: orderKeyAt(ledger, field, sessionId, index) })
+    return write(ledger, sessionId, onOrderedShelf(ledger[sessionId], field, orderKeyAt(ledger, field, sessionId, index)))
   }
   const others = shelfIds.filter((id) => id !== sessionId)
   const at = Math.max(0, Math.min(index, others.length))
   const order = [...others.slice(0, at), sessionId, ...others.slice(at)]
   const next: Record<string, LedgerEntry> = { ...ledger }
   for (let i = 0; i < order.length; i++) {
-    next[order[i]!] = { [field]: i }
+    const id = order[i]!
+    next[id] = onOrderedShelf(ledger[id], field, i)
   }
   return next
 }
@@ -167,7 +184,9 @@ function write(ledger: Ledger, sessionId: string, entry: LedgerEntry | undefined
 
 export function apply(ledger: Ledger, command: Command): Ledger {
   if (command.type === 'Pin') {
-    return write(ledger, command.sessionId, { pin: nextOrderKey(ledger, 'pin') })
+    const entry = ledger[command.sessionId]
+    const pinned = onOrderedShelf(entry, 'pin', nextOrderKey(ledger, 'pin'))
+    return write(ledger, command.sessionId, entry?.settledAt === undefined || command.at === undefined ? pinned : { ...pinned, manualActiveAt: command.at })
   }
   if (command.type === 'Unpin') {
     const entry = ledger[command.sessionId]
@@ -175,24 +194,38 @@ export function apply(ledger: Ledger, command: Command): Ledger {
     return write(ledger, command.sessionId, withoutPin(entry))
   }
   if (command.type === 'Settle') {
-    return write(ledger, command.sessionId, { settledAt: command.at })
+    return write(ledger, command.sessionId, { settledAt: command.at, settledBy: 'manual' })
+  }
+  if (command.type === 'AutoSettle') {
+    const entry: LedgerEntry = {
+      settledAt: command.at,
+      settledBy: command.reason === 'inactive' ? 'auto-inactive' : command.reason === 'pr-merged' ? 'auto-pr-merged' : 'auto-pr-closed',
+      ...(command.pr === undefined ? {} : { settledPr: command.pr }),
+    }
+    return write(ledger, command.sessionId, entry)
   }
   if (command.type === 'Unsettle') {
-    return parkOnActive(ledger, command.sessionId)
+    return parkOnActive(ledger, command.sessionId, command.at)
   }
   if (command.type === 'Snooze') {
     if (command.pendingInteraction !== undefined) return ledger
-    return write(ledger, command.sessionId, { snoozedUntil: command.until })
+    const entry = ledger[command.sessionId]
+    const manualActiveAt = entry?.manualActiveAt ?? (entry?.settledAt === undefined ? undefined : command.at)
+    return write(ledger, command.sessionId, { snoozedUntil: command.until, ...(manualActiveAt === undefined ? {} : { manualActiveAt }) })
   }
   if (command.type === 'Wake') {
-    return parkOnActive(ledger, command.sessionId)
+    return parkOnActive(ledger, command.sessionId, ledger[command.sessionId]?.settledAt === undefined ? undefined : command.at)
   }
   if (command.type === 'Drop') {
     if (command.dest === 'pinned') {
-      return placeOnShelf(ledger, command.sessionId, 'pin', command.index, command.shelfIds)
+      const placed = placeOnShelf(ledger, command.sessionId, 'pin', command.index, command.shelfIds)
+      if (ledger[command.sessionId]?.settledAt === undefined || command.at === undefined) return placed
+      return write(placed, command.sessionId, { ...placed[command.sessionId], manualActiveAt: command.at })
     }
     if (command.dest === 'active') {
-      return placeOnShelf(ledger, command.sessionId, 'active', command.index, command.shelfIds)
+      const placed = placeOnShelf(ledger, command.sessionId, 'active', command.index, command.shelfIds)
+      if (ledger[command.sessionId]?.settledAt === undefined || command.at === undefined) return placed
+      return write(placed, command.sessionId, { ...placed[command.sessionId], manualActiveAt: command.at })
     }
     if (command.dest === 'settled') {
       const entry = ledger[command.sessionId]
@@ -200,7 +233,7 @@ export function apply(ledger: Ledger, command: Command): Ledger {
       const until = entry?.snoozedUntil
       if (until !== undefined && (command.now === undefined || until > command.now)) return ledger
       if (command.at === undefined) return ledger
-      return write(ledger, command.sessionId, { settledAt: command.at })
+      return write(ledger, command.sessionId, { settledAt: command.at, settledBy: 'manual' })
     }
     return ledger
   }
@@ -227,8 +260,11 @@ function byOrderThenRecency(
   }
 }
 
-function parkOnActive(ledger: Ledger, sessionId: string): Ledger {
-  return write(ledger, sessionId, { active: nextOrderKey(ledger, 'active') })
+function parkOnActive(ledger: Ledger, sessionId: string, manualActiveAt = ledger[sessionId]?.manualActiveAt): Ledger {
+  return write(ledger, sessionId, {
+    active: nextOrderKey(ledger, 'active'),
+    ...(manualActiveAt === undefined ? {} : { manualActiveAt }),
+  })
 }
 
 function workspaceOf(session: Session, workspaces: readonly Workspace[]): Workspace | undefined {
@@ -252,7 +288,7 @@ const IDENTITY_COLORS = [
   'pink', 'rose',
 ] as const
 
-function identityOf(title: string): WorkspaceIdentity {
+export function identityOf(title: string): WorkspaceIdentity {
   const normalized = title.normalize('NFKC').trim()
   const words = normalized.match(/[\p{L}\p{N}]+/gu) ?? []
   const firstWord = words[0]
@@ -279,7 +315,7 @@ function draftOf(input: ProjectInput, sessionId: string): string {
   return text !== undefined && text !== '' ? text : ''
 }
 
-function relativeTimeOf(updatedAt: number, now: number): RelativeTime {
+export function relativeTimeOf(updatedAt: number, now: number): RelativeTime {
   const min = 60_000
   const hour = 3_600_000
   const day = 86_400_000

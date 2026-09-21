@@ -59,10 +59,11 @@ const layout = JSON.parse(await evaluate(`JSON.stringify((() => {
     hasTaskbar: root !== null,
     mobileClass: root?.classList.contains('dsht3-mobile') ?? false,
     marker: root?.hasAttribute('data-dsh-mobile-taskbar') ?? false,
-    title: document.querySelector('.dsht3-mobile-title')?.textContent ?? null,
-    search: document.querySelector('[aria-label="搜索会话"], [aria-label="Search sessions"]') !== null,
+    brand: document.querySelector('.dsht3-mobile-brand') !== null,
+    search: document.querySelector('.dsht3-mobile-search input') !== null,
     close: document.querySelector('[data-dsh-mobile-close]') !== null,
     fab: document.querySelector('.dsht3-mobile-new') !== null,
+    fabText: document.querySelector('.dsht3-mobile-new span')?.textContent ?? null,
     cards: document.querySelectorAll('.dsht3-card').length,
     drawerOpen: document.querySelector('[data-drawer-open]') !== null,
     width: rect && { w: Math.round(rect.width), h: Math.round(rect.height) },
@@ -72,25 +73,26 @@ const layout = JSON.parse(await evaluate(`JSON.stringify((() => {
 })())`))
 shot('apk-e2e-sidebar.png')
 if (!layout.hasTaskbar || !layout.mobileClass || !layout.marker) throw new Error('layout ' + JSON.stringify(layout))
-if (!layout.close || !layout.fab || !layout.search) throw new Error('chrome ' + JSON.stringify(layout))
+if (!layout.brand || !layout.fab || !layout.search || layout.close || layout.fabText) throw new Error('chrome ' + JSON.stringify(layout))
 if (!(layout.drawerWidth >= layout.viewport.w - 40)) throw new Error('not full page ' + JSON.stringify(layout))
 if (layout.cards < 1) throw new Error('no cards ' + JSON.stringify(layout))
 
-const searchClick = await evaluate(`(() => {
-  const button = [...document.querySelectorAll('.dsht3-mobile-icon')].find(el => /搜索|Search/.test(el.getAttribute('aria-label') ?? ''))
-  if (!(button instanceof HTMLButtonElement)) return 'missing'
-  button.click()
-  return button.getAttribute('aria-label')
-})()`)
-if (searchClick === 'missing') throw new Error('search button missing')
-await delay(500)
 const searching = JSON.parse(await evaluate(`JSON.stringify({
   input: document.querySelector('.dsht3-mobile-search input') !== null,
-  closeSearch: document.querySelector('[aria-label="退出搜索"], [aria-label="Close search"]') !== null,
 })`))
 shot('apk-e2e-search.png')
-if (!searching.input || !searching.closeSearch) throw new Error('search ' + JSON.stringify(searching))
-await evaluate(`document.querySelector('[aria-label="退出搜索"], [aria-label="Close search"]')?.click()`)
+if (!searching.input) throw new Error('search ' + JSON.stringify(searching))
+
+const picked = await evaluate(`(() => {
+  const fab = document.querySelector('.dsht3-mobile-new')
+  if (!(fab instanceof HTMLButtonElement)) return 'missing-fab'
+  fab.click()
+  return document.querySelector('.dsht3-choose-page') !== null ? 'picker' : 'no-picker'
+})()`)
+await delay(300)
+shot('apk-e2e-choose-project.png')
+if (picked !== 'picker') throw new Error('choose project ' + picked)
+await evaluate(`document.querySelector('[aria-label="返回会话列表"], [aria-label="Back to sessions"]')?.click()`)
 await delay(300)
 
 const openedId = await evaluate(`(() => {

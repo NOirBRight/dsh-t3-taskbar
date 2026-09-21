@@ -4,7 +4,7 @@ import type { WorkspaceBrowserProps } from '@deepseek-ai/dsh-client-ui-workspace
 import { identityOf, project, relativeTimeOf, type Card, type CardMarks, type Command, type GitMarks, type RelativeTime, type Session, type Shelf, type ViewModel } from '../taskbar.ts'
 import { dropCommand, dropVerbOf, type DropDest, type DropHint } from './drop.ts'
 import { draftsSnapshot, EMPTY_DRAFTS, subscribeDrafts } from './drafts.ts'
-import { AddWorkspaceIcon, AgyRuntimeIcon, ArchiveIcon, BranchIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CloseIcon, CursorRuntimeIcon, DshRuntimeIcon, LoadingIcon, MoreIcon, NewSessionIcon, PenIcon, PinIcon, RestoreIcon, SearchIcon, SettingsIcon, WaitingIcon, WorkspaceFilterIcon, WorktreeIcon } from './icons.tsx'
+import { AddWorkspaceIcon, AgyRuntimeIcon, ArchiveIcon, ArrowLeftIcon, BranchIcon, BrandWordmark, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CloseIcon, CursorRuntimeIcon, DshRuntimeIcon, FilterFilledIcon, FilterIcon, FolderIcon, LoadingIcon, MoreIcon, NewSessionIcon, PenIcon, PinIcon, PlusIcon, RestoreIcon, SearchIcon, SettingsIcon, SquarePenIcon, T3ChevronRightIcon, T3SearchIcon, WaitingIcon, WorkspaceFilterIcon, WorktreeIcon } from './icons.tsx'
 import { loadGitMarks } from './git-marks.ts'
 import { applyLedger, loadLedger } from './ledger.ts'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -13,6 +13,7 @@ import { matchingIds } from './search.ts'
 import type { TaskbarKey } from './locales.ts'
 import { formatWake, HOUR_MS, laterToday18, toDatetimeLocal, tomorrow09 } from './snooze-time.ts'
 import { SETTLED_INITIAL, SETTLED_PAGE, settledVisibleCount } from './settled.ts'
+import { placeMenu } from './place-menu.ts'
 import { runtimeProtectionSnapshot, subscribeRuntimeProtection, syncProtection } from './protection.ts'
 
 type Props = Omit<WorkspaceBrowserProps, 't' | 'renderSlot'> & PropsRenderSlots<'t3-taskbar.directoryFlow'> & {
@@ -25,6 +26,64 @@ type Props = Omit<WorkspaceBrowserProps, 't' | 'renderSlot'> & PropsRenderSlots<
 
 const SEARCH_DEBOUNCE_MS = 250
 const NOW_TICK_MS = 1000
+const MOBILE_DRAWER_BOOT_MS = 2500
+const MOBILE_DRAWER_RETRY_MS = 400
+const PLATFORM_BACK_EVENT = 'dsh-mobile:platform-back'
+
+/** Survives Taskbar remounts; never toggles an already-open drawer. */
+const mobileDrawerBoot = { poked: 0, lastAt: 0, seenOpen: false, userClosed: false, started: 0 }
+
+function mobileDrawerIsOpen(): boolean {
+  return document.querySelector('[data-dsh-mobile-frame]')?.hasAttribute('data-drawer-open') === true
+}
+
+function navigationMenuButton(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('button[aria-label="打开导航菜单"], button[aria-label="Open navigation menu"]')
+    ?? document.querySelector<HTMLButtonElement>('[data-mobile-topbar] > button')
+}
+
+function pokeMobileDrawer(instant = false): void {
+  if (mobileDrawerIsOpen()) return
+  const drawer = document.querySelector<HTMLElement>('nav[aria-label="导航抽屉"]')
+  if (instant && drawer !== null) drawer.style.setProperty('transition', 'none', 'important')
+  navigationMenuButton()?.click()
+  if (instant && drawer !== null) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { drawer.style.removeProperty('transition') })
+    })
+  }
+}
+
+let closeOpenMenu: (() => void) | undefined
+
+function overlayBlocksPlatformBack(): boolean {
+  return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
+    || document.querySelector('[data-dsh-profile-menu]') !== null
+}
+
+function onMobilePlatformBack(event: Event): void {
+  if (document.querySelector('[data-dsh-mobile-frame], [data-dsh-mobile-taskbar]') === null) return
+  if (document.querySelector('.dsht3-menu') !== null) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    closeOpenMenu?.()
+    return
+  }
+  if (overlayBlocksPlatformBack()) return
+  if (document.querySelector('.dsht3-choose-page') !== null) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    document.querySelector<HTMLButtonElement>('.dsht3-choose-head button')?.click()
+    return
+  }
+  if (mobileDrawerIsOpen()) {
+    event.stopImmediatePropagation()
+    return
+  }
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  pokeMobileDrawer()
+}
 
 type MenuState = { id: string; anchor: DOMRect; snooze: boolean }
 type SwipeAction = 'settle' | 'unsettle' | 'wake'
@@ -97,6 +156,67 @@ function formatRelative(time: RelativeTime, t: Props['t']): string {
   if (time.unit === 'now') return t('time.now')
   const key = `time.${time.unit}` as const
   return t(key).replace('{n}', String(time.n))
+}
+
+function shortenWorkspacePath(path: string): string {
+  if (path.length <= 36) return path
+  return `${path.slice(0, 18)}...${path.slice(-16)}`
+}
+
+function ChooseWorkspacePage({
+  workspaces,
+  canAdd,
+  onBack,
+  onAdd,
+  onPick,
+  t,
+}: {
+  workspaces: readonly { workspaceId: string; title: string; path: string }[]
+  canAdd: boolean
+  onBack: () => void
+  onAdd: () => void
+  onPick: (workspaceId: string) => void
+  t: Props['t']
+}) {
+  return (
+    <div className="dsht3-choose-page">
+      <div className="dsht3-choose-head">
+        <button type="button" className="dsht3-mobile-icon" aria-label={t('workspace.chooseBack')} onClick={onBack}>
+          <ArrowLeftIcon />
+        </button>
+        <div className="dsht3-choose-title">{t('workspace.choose')}</div>
+        {canAdd ? (
+          <button type="button" className="dsht3-mobile-icon" aria-label={t('workspace.chooseAdd')} onClick={onAdd}>
+            <PlusIcon />
+          </button>
+        ) : <span className="dsht3-mobile-icon" aria-hidden="true" />}
+      </div>
+      <div className="dsht3-choose-list">
+        {workspaces.length === 0 ? (
+          <div className="dsht3-choose-empty">
+            <div>{t('workspace.chooseEmpty')}</div>
+            <p>{t('workspace.chooseEmptyDetail')}</p>
+            {canAdd ? <button type="button" className="dsht3-choose-empty-add" onClick={onAdd}>{t('workspace.chooseAdd')}</button> : null}
+          </div>
+        ) : workspaces.map(workspace => (
+          <button
+            key={workspace.workspaceId}
+            type="button"
+            className="dsht3-choose-row"
+            data-dsh-mobile-session-nav
+            onClick={() => onPick(workspace.workspaceId)}
+          >
+            <FolderIcon size={22} />
+            <span className="dsht3-choose-copy">
+              <span className="dsht3-choose-name">{workspace.title}</span>
+              {workspace.path !== '' ? <span className="dsht3-choose-path">{shortenWorkspacePath(workspace.path)}</span> : null}
+            </span>
+            <T3ChevronRightIcon size={18} />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function lineOneMeta(card: Card, t: Props['t']): string {
@@ -268,17 +388,18 @@ export function Taskbar(props: Props) {
     () => [] as const,
   )
   const [query, setQuery] = useState('')
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [pickingWorkspace, setPickingWorkspace] = useState(false)
   const [workspaceFilter, setWorkspaceFilter] = useState<string>()
   const [workspaceFilterOpen, setWorkspaceFilterOpen] = useState(false)
   const [workspaceQuery, setWorkspaceQuery] = useState('')
   const [hostHits, setHostHits] = useState<readonly { sessionId: string; snippet: string }[]>([])
   const [menu, setMenu] = useState<MenuState | null>(null)
-  const [menuPosition, setMenuPosition] = useState({ x: 8, y: 8 })
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [customUntil, setCustomUntil] = useState('')
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [snoozedOpen, setSnoozedOpen] = useState(true)
-  const [settledOpen, setSettledOpen] = useState(false)
+  const [settledOpen, setSettledOpen] = useState(() => mobile === true || (typeof document !== 'undefined' && document.querySelector('[data-dsh-mobile-frame]') !== null))
+  const [settingsOpenable, setSettingsOpenable] = useState(false)
   const [settledLimit, setSettledLimit] = useState(SETTLED_INITIAL)
   const [now, setNow] = useState(() => Date.now())
   const [flowOpen, setFlowOpen] = useState(false)
@@ -313,8 +434,11 @@ export function Taskbar(props: Props) {
   useEffect(() => cancelLongPress, [])
   const closeMenu = (restoreFocus = true) => {
     setMenu(null)
+    setMenuPosition(null)
     if (restoreFocus) menuTriggerRef.current?.focus({ preventScroll: true })
   }
+  closeOpenMenu = () => closeMenu(false)
+  useEffect(() => () => { closeOpenMenu = undefined }, [])
   const closeDialog = () => setDialog(null)
 
   useEffect(() => {
@@ -541,11 +665,9 @@ export function Taskbar(props: Props) {
       event.preventDefault()
       closeMenu()
     }
-    document.addEventListener('click', close)
     document.addEventListener('keydown', onKey)
     window.addEventListener('resize', close)
     return () => {
-      document.removeEventListener('click', close)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', close)
     }
@@ -575,16 +697,20 @@ export function Taskbar(props: Props) {
 
   useLayoutEffect(() => {
     const element = menuRef.current
-    if (menu === null || element === null) return
+    if (menu === null || element === null) {
+      setMenuPosition(null)
+      return
+    }
     const box = element.getBoundingClientRect()
-    const x = Math.max(8, Math.min(window.innerWidth - box.width - 8, menu.anchor.right - box.width))
-    const below = menu.anchor.bottom + 5
-    const y = below + box.height <= window.innerHeight - 8
-      ? below
-      : Math.max(8, menu.anchor.top - box.height - 5)
-    setMenuPosition({ x, y })
+    const originX = box.left - (menuPosition?.x ?? 0)
+    const originY = box.top - (menuPosition?.y ?? 0)
+    const placed = placeMenu(menu.anchor, { width: box.width, height: box.height }, { width: window.innerWidth, height: window.innerHeight })
+    const next = { x: placed.x - originX, y: placed.y - originY }
+    if (menuPosition === null || Math.abs(menuPosition.x - next.x) > 0.5 || Math.abs(menuPosition.y - next.y) > 0.5) {
+      setMenuPosition(next)
+    }
     element.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
-  }, [menu])
+  }, [menu, menuPosition])
 
   const cardFromHostHit = (sessionId: string, snippet: string): Card | undefined => {
     if (workspaces.archivedSessionIds.includes(sessionId as never)) return undefined
@@ -629,6 +755,10 @@ export function Taskbar(props: Props) {
 
   const onOpen = (sessionId: string) => open(sessionId as never)
   const onStartSession = () => startSession(filterId as never)
+  const onPickWorkspace = (workspaceId: string) => {
+    setPickingWorkspace(false)
+    startSession(workspaceId as never)
+  }
   const send = async (command: Command): Promise<boolean> => {
     try {
       const next = await applyLedger(command, ledger.revision)
@@ -682,6 +812,7 @@ export function Taskbar(props: Props) {
     const trigger = event.currentTarget as HTMLElement
     menuTriggerRef.current = trigger
     setCustomUntil(toDatetimeLocal(Date.now() + HOUR_MS))
+    setMenuPosition(null)
     setMenu({ id, anchor: trigger.getBoundingClientRect(), snooze })
   }
   const openMenuForSwipe = (id: string, snooze = false) => {
@@ -689,6 +820,7 @@ export function Taskbar(props: Props) {
     if (trigger === undefined) return
     menuTriggerRef.current = trigger
     setCustomUntil(toDatetimeLocal(Date.now() + HOUR_MS))
+    setMenuPosition(null)
     setMenu({ id, anchor: trigger.getBoundingClientRect(), snooze })
   }
 
@@ -857,6 +989,7 @@ export function Taskbar(props: Props) {
         suppressClick.current = true
         menuTriggerRef.current = trigger
         setCustomUntil(toDatetimeLocal(Date.now() + HOUR_MS))
+        setMenuPosition(null)
         setMenu({ id, anchor: row.getBoundingClientRect(), snooze: false })
       }, 500) }
       return
@@ -1035,6 +1168,76 @@ export function Taskbar(props: Props) {
       window.removeEventListener('resize', cancelAll)
     }
   }, [dragging, dropHint])
+
+  useLayoutEffect(() => {
+    let defaulted = false
+    const expandSettled = () => {
+      if (defaulted || document.querySelector('[data-dsh-mobile-frame]') === null) return
+      defaulted = true
+      setSettledOpen(true)
+    }
+    expandSettled()
+    const syncSettings = () => setSettingsOpenable(document.querySelector('[data-slot="settings.trigger"]') !== null)
+    syncSettings()
+    const observer = new MutationObserver(() => { expandSettled(); syncSettings() })
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-dsh-mobile-frame'] })
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener(PLATFORM_BACK_EVENT, onMobilePlatformBack, true)
+    return () => document.removeEventListener(PLATFORM_BACK_EVENT, onMobilePlatformBack, true)
+  }, [])
+
+  useEffect(() => {
+    if (mobileDrawerBoot.started === 0) mobileDrawerBoot.started = Date.now()
+    let cancelled = false
+    let observer: MutationObserver | undefined
+    let interval = 0
+    let timeout = 0
+    const remaining = Math.max(0, MOBILE_DRAWER_BOOT_MS - (Date.now() - mobileDrawerBoot.started))
+    const stop = () => {
+      observer?.disconnect()
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+      document.removeEventListener('click', onSessionOpen, true)
+    }
+    const onSessionOpen = (event: Event) => {
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest('[data-dsh-mobile-session-nav], [data-dsh-mobile-close]') === null) return
+      mobileDrawerBoot.userClosed = true
+      stop()
+    }
+    const tick = (): boolean => {
+      if (cancelled || mobileDrawerBoot.userClosed) return true
+      const now = Date.now()
+      if (now - mobileDrawerBoot.started > MOBILE_DRAWER_BOOT_MS) return true
+      if (mobileDrawerIsOpen()) {
+        mobileDrawerBoot.seenOpen = true
+        return true
+      }
+      if (document.querySelector('[data-dsh-mobile-frame]') === null) return false
+      if (mobileDrawerBoot.poked >= 2) return true
+      if (mobileDrawerBoot.poked > 0 && now - mobileDrawerBoot.lastAt < MOBILE_DRAWER_RETRY_MS) return false
+      mobileDrawerBoot.poked += 1
+      mobileDrawerBoot.lastAt = now
+      pokeMobileDrawer(true)
+      return mobileDrawerIsOpen()
+    }
+    document.addEventListener('click', onSessionOpen, true)
+    if (tick()) {
+      document.removeEventListener('click', onSessionOpen, true)
+      return
+    }
+    observer = new MutationObserver(() => { if (tick()) stop() })
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-dsh-mobile-frame', 'data-drawer-open'] })
+    interval = window.setInterval(() => { if (tick()) stop() }, 50)
+    timeout = window.setTimeout(stop, remaining || MOBILE_DRAWER_BOOT_MS)
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [])
 
   useEffect(() => {
     if (!mobileLayout) return
@@ -1438,14 +1641,50 @@ export function Taskbar(props: Props) {
     setWorkspaceQuery('')
   }
   const empty = pinned.length === 0 && active.length === 0 && snoozed.length === 0 && settled.length === 0 && unsentDrafts.length === 0
-  const mobileSearching = mobileSearchOpen || query.length > 0
-  const closeMobileSearch = () => {
-    setQuery('')
-    setMobileSearchOpen(false)
-  }
   const openSettings = () => {
     document.querySelector<HTMLButtonElement>('[data-slot="settings.trigger"]')?.click()
   }
+  const workspaceFilterControl = showWorkspaceFilter ? (
+    <div ref={workspaceFilterRef} className="dsht3-workspace-filter">
+      <button
+        type="button"
+        className={mobileLayout ? 'dsht3-mobile-icon' : 'dsht3-icon'}
+        aria-label={t('filter.aria')}
+        aria-expanded={workspaceFilterOpen}
+        onClick={() => setWorkspaceFilterOpen(open => !open)}
+      >
+        {mobileLayout
+          ? (filterId !== undefined ? <FilterFilledIcon /> : <FilterIcon />)
+          : <WorkspaceFilterIcon />}
+      </button>
+      {workspaceFilterOpen ? (
+        <div className="dsht3-workspace-menu" role="dialog" aria-label={t('filter.aria')}>
+          <label className="dsht3-workspace-search">
+            <SearchIcon />
+            <input ref={workspaceSearchRef} value={workspaceQuery} placeholder={t('filter.search')} aria-label={t('filter.search')} onChange={event => setWorkspaceQuery(event.target.value)} />
+          </label>
+          {mobileLayout && canRaiseDirectoryFlow ? (
+            <button type="button" className="dsht3-workspace-add" onClick={() => { setWorkspaceFilterOpen(false); setFlowOpen(true) }}>
+              <PlusIcon size={16} /><span>{t('workspace.add')}</span>
+            </button>
+          ) : null}
+          <div className="dsht3-workspace-options" role="listbox" aria-label={t('filter.aria')}>
+            <button type="button" role="option" aria-selected={filterId === undefined} className={filterId === undefined ? 'dsht3-workspace-selected' : undefined} onClick={() => selectWorkspace()}>
+              <WorkspaceFilterIcon /><span>{t('filter.all')}</span>
+            </button>
+            {visibleWorkspaces.map(workspace => {
+              const identity = identityOf(workspace.title)
+              return (
+                <button key={workspace.workspaceId} type="button" role="option" aria-selected={filterId === workspace.workspaceId} className={filterId === workspace.workspaceId ? 'dsht3-workspace-selected' : undefined} onClick={() => selectWorkspace(workspace.workspaceId)}>
+                  <span className="dsht3-ident" data-color={identity.color} aria-hidden="true">{identity.monogram}</span><span>{workspace.title}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  ) : null
 
   return (
     <div ref={rootRef} className={mobileLayout ? 'dsht3 dsht3-mobile' : 'dsht3'}
@@ -1458,90 +1697,55 @@ export function Taskbar(props: Props) {
         if (swipe !== null && target.closest('[data-dsh-mobile-swipe-action]') === null) setSwipe(null)
       }}
     >
-      {mobileLayout ? (
-        <div className="dsht3-mobile-head">
-          {mobileSearching ? (
-            <>
-              <button type="button" className="dsht3-mobile-icon dsht3-mobile-back" aria-label={t('mobile.search.close')} onClick={closeMobileSearch}>
-                <ChevronRightIcon />
-              </button>
-              <label className="dsht3-search dsht3-mobile-search">
-                <SearchIcon />
-                <input autoCapitalize="none" autoCorrect="off" enterKeyHint="search" spellCheck={false} autoFocus value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
-              </label>
-            </>
-          ) : (
-            <>
-              <button type="button" className="dsht3-mobile-icon dsht3-mobile-close" aria-label={t('mobile.close')} data-dsh-mobile-close>
-                <ChevronRightIcon />
-              </button>
-              <div className="dsht3-mobile-title">{t('mobile.title')}</div>
-              <button type="button" className="dsht3-mobile-icon" aria-label={t('search.aria')} onClick={() => setMobileSearchOpen(true)}>
-                <SearchIcon />
-              </button>
+      {mobileLayout && pickingWorkspace ? (
+        <ChooseWorkspacePage
+          workspaces={workspaces.items.map(workspace => ({ workspaceId: workspace.workspaceId, title: workspace.title, path: workspace.path ?? '' }))}
+          canAdd={canRaiseDirectoryFlow}
+          onBack={() => setPickingWorkspace(false)}
+          onAdd={() => setFlowOpen(true)}
+          onPick={onPickWorkspace}
+          t={t}
+        />
+      ) : null}
+      {mobileLayout && !pickingWorkspace ? (
+        <>
+          <div className="dsht3-mobile-head">
+            <div className="dsht3-mobile-brand" aria-label="DeepSeek Harness">
+              <BrandWordmark size={20} />
+            </div>
+            {workspaceFilterControl}
+            {settingsOpenable ? (
               <button type="button" className="dsht3-mobile-icon" aria-label={t('mobile.settings')} onClick={openSettings}>
                 <SettingsIcon />
               </button>
-            </>
-          )}
-        </div>
+            ) : null}
+          </div>
+          <label className="dsht3-search dsht3-mobile-search">
+            <T3SearchIcon size={16} />
+            <input autoCapitalize="none" autoCorrect="off" enterKeyHint="search" spellCheck={false} value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+        </>
       ) : null}
       {swipeError ? <div className="dsht3-mobile-error" role="status">{t('action.failed')}</div> : null}
       <div className="dsht3-head">
-        <label className="dsht3-search">
-          <SearchIcon />
-          <input autoCapitalize="none" autoCorrect="off" enterKeyHint="search" spellCheck={false} value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-        {showWorkspaceFilter ? (
-          <div ref={workspaceFilterRef} className="dsht3-workspace-filter">
-            <button
-              type="button"
-              className="dsht3-icon"
-              aria-label={t('filter.aria')}
-              aria-expanded={workspaceFilterOpen}
-              onClick={() => setWorkspaceFilterOpen(open => !open)}
-            >
-              <WorkspaceFilterIcon />
-            </button>
-            {workspaceFilterOpen ? (
-              <div className="dsht3-workspace-menu" role="dialog" aria-label={t('filter.aria')}>
-                <label className="dsht3-workspace-search">
-                  <SearchIcon />
-                  <input ref={workspaceSearchRef} value={workspaceQuery} placeholder={t('filter.search')} aria-label={t('filter.search')} onChange={event => setWorkspaceQuery(event.target.value)} />
-                </label>
-                {mobileLayout && canRaiseDirectoryFlow ? (
-                  <button type="button" className="dsht3-workspace-add" onClick={() => { setWorkspaceFilterOpen(false); setFlowOpen(true) }}>
-                    <AddWorkspaceIcon /><span>{t('workspace.add')}</span>
-                  </button>
-                ) : null}
-                <div className="dsht3-workspace-options" role="listbox" aria-label={t('filter.aria')}>
-                  <button type="button" role="option" aria-selected={filterId === undefined} className={filterId === undefined ? 'dsht3-workspace-selected' : undefined} onClick={() => selectWorkspace()}>
-                    <WorkspaceFilterIcon /><span>{t('filter.all')}</span>
-                  </button>
-                  {visibleWorkspaces.map(workspace => {
-                    const identity = identityOf(workspace.title)
-                    return (
-                      <button key={workspace.workspaceId} type="button" role="option" aria-selected={filterId === workspace.workspaceId} className={filterId === workspace.workspaceId ? 'dsht3-workspace-selected' : undefined} onClick={() => selectWorkspace(workspace.workspaceId)}>
-                        <span className="dsht3-ident" data-color={identity.color} aria-hidden="true">{identity.monogram}</span><span>{workspace.title}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {mobileLayout ? null : (
+          <label className="dsht3-search">
+            <SearchIcon />
+            <input autoCapitalize="none" autoCorrect="off" enterKeyHint="search" spellCheck={false} value={query} placeholder={t('search.placeholder')} aria-label={t('search.aria')} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+        )}
+        {mobileLayout ? null : workspaceFilterControl}
         {canRaiseDirectoryFlow ? (
           <button type="button" className="dsht3-icon" aria-label={t('workspace.add')} onClick={() => setFlowOpen(true)}>
             <AddWorkspaceIcon />
           </button>
         ) : null}
-        <button type="button" className="dsht3-icon" aria-label={t('session.blank')} data-dsh-mobile-session-nav onClick={onStartSession}>
+        <button type="button" className="dsht3-icon" aria-label={t('session.blank')} onClick={onStartSession}>
           <NewSessionIcon />
         </button>
         {directoryFlow}
       </div>
-      <div className="dsht3-list-wrap">
+      <div className="dsht3-list-wrap" hidden={mobileLayout && pickingWorkspace} aria-hidden={mobileLayout && pickingWorkspace ? true : undefined}>
       <div ref={listRef} className="dsht3-list" onScroll={() => { cancelLongPress(); swipeTrack.current = undefined; setSwipe(null); closeMenu(false); syncScrollbar() }}>
         {searching ? (
           results.length === 0 ? <div className="dsht3-empty">{t('search.empty')}</div> : results.map((card) => renderCard(card))
@@ -1600,7 +1804,7 @@ export function Taskbar(props: Props) {
           </>
         )}
       </div>
-      {scrollbar.visible ? <div
+      {!mobileLayout && scrollbar.visible ? <div
         className="dsht3-scroll-thumb"
         role="scrollbar"
         aria-orientation="vertical"
@@ -1614,10 +1818,9 @@ export function Taskbar(props: Props) {
         onPointerCancel={onScrollbarPointerEnd}
       /> : null}
       </div>
-      {mobileLayout ? (
-        <button type="button" className="dsht3-mobile-new" aria-label={t('session.blank')} data-dsh-mobile-session-nav onClick={onStartSession}>
-          <NewSessionIcon />
-          <span>{t('session.blank')}</span>
+      {mobileLayout && !pickingWorkspace ? (
+        <button type="button" className="dsht3-mobile-new" aria-label={t('session.blank')} onClick={() => { setWorkspaceFilterOpen(false); setPickingWorkspace(true) }}>
+          <SquarePenIcon size={20} />
         </button>
       ) : null}
       {dragVisual !== null && dragCard !== undefined ? <div ref={dragOverlayRef} className={`dsht3-drag-overlay${dragSlim ? ' dsht3-slim' : ''}`} style={{ top: dragVisual.top, left: dragVisual.left, width: dragVisual.width }} aria-hidden="true">
@@ -1626,13 +1829,36 @@ export function Taskbar(props: Props) {
            style={swipeCardStyle(dragCard.sessionId)}>{dragSlim ? settledCardBody(dragCard) : cardBody(dragCard)}</div>
       </div> : null}
       {menu ? (
+        <>
+        <div
+          className="dsht3-menu-backdrop"
+          onPointerDown={event => {
+            event.preventDefault()
+            event.stopPropagation()
+            suppressClick.current = true
+          }}
+          onPointerUp={event => {
+            event.preventDefault()
+            event.stopPropagation()
+            closeMenu(false)
+          }}
+          onClick={event => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        />
         <div
           ref={menuRef}
-          className="dsht3-menu"
-          role="menu"
+          className={mobileLayout ? 'dsht3-menu dsht3-mobile-menu' : 'dsht3-menu'}
+          role="group"
           aria-label={t('menu.aria')}
-          style={{ left: menuPosition.x, top: menuPosition.y }}
+          style={{
+            left: menuPosition?.x ?? 0,
+            top: menuPosition?.y ?? 0,
+            visibility: menuPosition === null ? 'hidden' : 'visible',
+          }}
           onClick={(event) => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
           onKeyDown={onMenuKeyDown}
         >
           <div className="dsht3-menu-head">{workspaceFor(menu.id)?.title ?? t('menu.aria')}</div>
@@ -1694,6 +1920,7 @@ export function Taskbar(props: Props) {
             </>
           )}
         </div>
+        </>
       ) : null}
       {dialog ? (
         <div className="dsht3-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) closeDialog() }}>

@@ -59,10 +59,11 @@ async def main():
             hasTaskbar: root !== null,
             mobileClass: root?.classList.contains('dsht3-mobile') ?? false,
             marker: root?.hasAttribute('data-dsh-mobile-taskbar') ?? false,
-            title: document.querySelector('.dsht3-mobile-title')?.textContent ?? null,
-            search: document.querySelector('[aria-label="搜索会话"], [aria-label="Search sessions"]') !== null,
+            brand: document.querySelector('.dsht3-mobile-brand') !== null,
+            search: document.querySelector('.dsht3-mobile-search input') !== null,
             close: document.querySelector('[data-dsh-mobile-close]') !== null,
             fab: document.querySelector('.dsht3-mobile-new') !== null,
+            fabText: document.querySelector('.dsht3-mobile-new span')?.textContent ?? null,
             cards: document.querySelectorAll('.dsht3-card').length,
             drawerOpen: document.querySelector('[data-drawer-open]') !== null,
             width: rect && { w: Math.round(rect.width), h: Math.round(rect.height) },
@@ -73,25 +74,26 @@ async def main():
         await page.screenshot(path=str(ARTIFACTS / 'apk-e2e-sidebar.png'))
         assert layout['hasTaskbar'], layout
         assert layout['mobileClass'] and layout['marker'], layout
-        assert layout['close'] and layout['fab'] and layout['search'], layout
+        assert layout['brand'] and layout['fab'] and layout['search'] and not layout['close'] and not layout['fabText'], layout
         assert layout['drawerWidth'] is not None and layout['drawerWidth'] >= layout['viewport']['w'] - 8, layout
         assert layout['cards'] >= 1, layout
 
-        search = await evaluate(page, '''() => {
-          const button = document.querySelector('.dsht3-mobile-icon[aria-label="搜索会话"], .dsht3-mobile-icon[aria-label="Search sessions"]')
-          if (!(button instanceof HTMLButtonElement)) return 'missing'
-          button.click()
-          return 'clicked'
-        }''')
-        await page.wait_for_timeout(400)
         searching = await evaluate(page, '''() => ({
           input: document.querySelector('.dsht3-mobile-search input') !== null,
-          closeSearch: document.querySelector('[aria-label="退出搜索"], [aria-label="Close search"]') !== null,
         })''')
         await page.screenshot(path=str(ARTIFACTS / 'apk-e2e-search.png'))
-        assert search == 'clicked' and searching['input'] and searching['closeSearch'], (search, searching)
+        assert searching['input'], searching
+        picked = await evaluate(page, '''() => {
+          const fab = document.querySelector('.dsht3-mobile-new')
+          if (!(fab instanceof HTMLButtonElement)) return 'missing-fab'
+          fab.click()
+          return document.querySelector('.dsht3-choose-page') !== null ? 'picker' : 'no-picker'
+        }''')
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(ARTIFACTS / 'apk-e2e-choose-project.png'))
+        assert picked == 'picker', picked
         await evaluate(page, '''() => {
-          document.querySelector('[aria-label="退出搜索"], [aria-label="Close search"]')?.click()
+          document.querySelector('[aria-label="返回会话列表"], [aria-label="Back to sessions"]')?.click()
         }''')
         await page.wait_for_timeout(300)
 

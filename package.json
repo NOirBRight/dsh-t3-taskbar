@@ -1,8 +1,12 @@
 {
   "name": "dsh-t3-taskbar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "DSH sidebar Taskbar: T3-style Session inbox",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NOirBRight/dsh-t3-taskbar.git"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

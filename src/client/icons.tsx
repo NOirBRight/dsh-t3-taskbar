@@ -19,7 +19,10 @@ import {
   IconSearchOutline16,
 } from './official-icons.tsx'
 
+export { BrandWordmark } from './brand-wordmark.tsx'
+
 export {
+  FishLogo,
   IconArchiveOutline20 as ArchiveIcon,
   IconBranchOutline16 as BranchIcon,
   IconCheckOutline16 as CheckIcon,
@@ -39,42 +42,19 @@ export {
   IconSearchOutline16 as SearchIcon,
 }
 
-/** Lucide Pin, ISC; same glyph T3 uses for pinned threads. */
-export function SettingsIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-      <path d="m19.4 15 .1.1a2 2 0 1 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.3a2 2 0 1 1-4 0v-.3A2 2 0 0 0 5.8 17.8l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 1.6 11.6h-.3a2 2 0 1 1 0-4h.3A2 2 0 0 0 3 4.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A2 2 0 0 0 9.2 0h.3a2 2 0 1 1 4 0v.3a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a2 2 0 0 0 1.4 3.4h.3a2 2 0 1 1 0 4h-.3a2 2 0 0 0-1.7 3.1Z" transform="translate(1.5 1.5) scale(.875)" />
-    </svg>
-  )
-}
-
-export function PinIcon({ off = false }: { off?: boolean }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 17v5" />
-      {off ? (
-        <>
-          <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" />
-          <path d="m2 2 20 20" />
-          <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" />
-        </>
-      ) : (
-        <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
-      )}
-    </svg>
-  )
-}
-
-/** Lucide Clock, ISC; sourced from Workstation/CodexHub. */
-export function ClockIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  )
-}
+export {
+  ArrowLeftIcon,
+  ClockIcon,
+  FilterFilledIcon,
+  FilterIcon,
+  FolderIcon,
+  PinIcon,
+  PlusIcon,
+  SettingsIcon,
+  SquarePenIcon,
+  T3ChevronRightIcon,
+  T3SearchIcon,
+} from './t3-icons.tsx'
 
 export function DshRuntimeIcon() {
   return <FishLogo size={12} />

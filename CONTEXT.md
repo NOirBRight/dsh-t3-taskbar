@@ -9,7 +9,7 @@ The left-hand inbox of Sessions this plugin shows in the official sidebar's work
 _Avoid_: Dock, status bar, right-panel tabbar, Thread list
 
 **Provider Usage**:
-Vendor quota tiles that already occupy the sidebar footer. This plugin leaves them in place and does not reimplement quota.
+Vendor quota tiles that already occupy the sidebar footer. On the desktop Taskbar this plugin leaves them in place and does not reimplement quota. On the APK Taskbar they are hidden so the Session list matches T3 chrome.
 _Avoid_: Session token fold, usage-monitor, tok/s
 
 **Session**:
@@ -17,7 +17,7 @@ The DSH list row — one agent task. T3's Thread is the analogue, not a second e
 _Avoid_: Thread, Conversation (the open transcript)
 
 **Workspace**:
-A DSH directory grouping that Sessions can belong to. T3's Project is the analogue. On a Card it is named on the first line, never a list heading.
+A DSH directory grouping that Sessions can belong to. T3's Project is the analogue. On a Card it is named on the first line, never a list heading. The APK choose-Workspace page keeps T3's English chrome ("Choose project"); the entity is still Workspace.
 _Avoid_: Project, Workspace group, Repo, 目录
 
 **Workspace Identity**:
